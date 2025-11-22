@@ -69,20 +69,53 @@ async function handleGetPageContext(sendResponse) {
 function analyzePageContextOnce() {
   const url = window.location.href;
 
-  // --- CONTEXTE : RECHERCHE ---
-  if (url.includes("/search/results/people/")) {
+  // --- CONTEXTE : RECHERCHE (résultats ou rubrique People d'entreprise) ---
+  if (url.includes("/search/results/people/") || (url.includes("/company/") && url.includes("/people"))) {
     let keyword = "";
     
-    // Tentative 1: URL param
-    try {
-      const urlObj = new URL(url);
-      keyword = urlObj.searchParams.get("keywords");
-    } catch (e) {}
+    if (url.includes("/search/results/people/")) {
+      // Tentative 1: URL param
+      try {
+        const urlObj = new URL(url);
+        keyword = urlObj.searchParams.get("keywords");
+      } catch (e) {}
 
-    // Tentative 2: Input du DOM (Sélecteur générique LinkedIn, peut varier)
-    if (!keyword) {
-      const searchInput = document.querySelector('input.search-global-typeahead__input');
-      if (searchInput) keyword = searchInput.value;
+      // Tentative 2: Input du DOM (Sélecteur générique LinkedIn, peut varier)
+      if (!keyword) {
+        const searchInput = document.querySelector('input.search-global-typeahead__input');
+        if (searchInput) keyword = searchInput.value;
+      }
+    } else {
+      // Page People d'entreprise
+      const companyTitleSelectors = [
+        '.org-top-card-summary__title',
+        '.org-top-card-module__title',
+        '.org-top-card-primary-content__title',
+        '[data-anonymize="company-name"]',
+        'h1'
+      ];
+      for (const selector of companyTitleSelectors) {
+        const el = document.querySelector(selector);
+        if (el && el.innerText?.trim()) {
+          keyword = el.innerText.trim();
+          break;
+        }
+      }
+      if (!keyword) {
+        const ogTitle = document.querySelector('meta[property="og:title"]')?.content || '';
+        keyword = ogTitle.split('|')[0]?.trim() || ogTitle;
+      }
+      if (!keyword) {
+        // fallback slug
+        try {
+          const urlObj = new URL(url);
+          const parts = urlObj.pathname.split('/');
+          const idx = parts.indexOf('company');
+          if (idx !== -1 && parts[idx + 1]) {
+            keyword = decodeURIComponent(parts[idx + 1]).replace(/-/g, ' ');
+          }
+        } catch (e) {}
+      }
     }
 
     // Nettoyage
