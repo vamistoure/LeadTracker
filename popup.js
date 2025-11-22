@@ -155,16 +155,6 @@ let isFromConnectButton = false; // Flag pour indiquer si le contexte vient d'un
 let currentExistingLead = null;
 let currentExistingState = null;
 
-const formatDisplayDate = (dateString) => dateString || '–';
-function getDaysDiff(dateString) {
-  if (!dateString) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const d = new Date(dateString);
-  d.setHours(0, 0, 0, 0);
-  return Math.floor((today - d) / (1000 * 60 * 60 * 24));
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
   showView('loading');
 
