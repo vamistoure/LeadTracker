@@ -9,8 +9,9 @@ console.log('[LeadTracker] Content script chargé');
 // Rate limiting: empêcher trop d'appels rapides (protection anti-bannissement)
 let lastCallTime = 0;
 const MIN_CALL_INTERVAL_MS = 500; // Minimum 500ms entre deux appels
-const MAX_HEADLINE_RETRIES = 6;
-const HEADLINE_RETRY_DELAY_MS = 500;
+const MAX_HEADLINE_RETRIES = 3;
+const HEADLINE_RETRY_DELAY_MS = 250;
+const DEBUG_HEADLINE = false; // Passe à true pour tracer les sélecteurs/headlines lors du debug
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "GET_PAGE_CONTEXT") {
@@ -42,9 +43,8 @@ async function handleGetPageContext(sendResponse) {
     if (context.contextType === "profile" && !context.profileHeadline) {
       for (let attempt = 0; attempt < MAX_HEADLINE_RETRIES; attempt++) {
         await sleep(HEADLINE_RETRY_DELAY_MS);
-        const nextContext = analyzePageContextOnce();
-        context = nextContext;
-        if (nextContext.profileHeadline) break;
+        context = analyzePageContextOnce();
+        if (context.profileHeadline) break;
       }
     }
     console.log("[LeadTracker] Contexte détecté:", context);
@@ -103,25 +103,8 @@ function analyzePageContextOnce() {
     // On lit uniquement les éléments déjà chargés sur la page actuelle
     // Sélecteurs "Best effort" pour LinkedIn (la structure change souvent)
     
-    // Attendre un peu si le DOM n'est pas encore complètement chargé
-    // Le nom est généralement dans un H1 dans la section top-card
-    let nameEl = document.querySelector('.pv-text-details__left-panel h1') 
-              || document.querySelector('.text-heading-xlarge')
-              || document.querySelector('h1.text-heading-xlarge')
-              || document.querySelector('h1[class*="text-heading"]')
-              || document.querySelector('main h1')
-              || document.querySelector('h1');
-    
-    // Si pas trouvé, essayer de chercher dans les sections principales
-    if (!nameEl || !nameEl.textContent?.trim()) {
-      const mainSection = document.querySelector('main') || document.querySelector('[role="main"]');
-      if (mainSection) {
-        nameEl = mainSection.querySelector('h1') || nameEl;
-      }
-    }
-    
     // Lecture unique du texte - pas de manipulation du DOM
-    let profileName = nameEl ? nameEl.innerText.trim() : null;
+    let profileName = readProfileName();
     const profileHeadline = readProfileHeadline();
 
     // Si toujours pas de nom, essayer depuis l'URL (dernier recours)
@@ -161,6 +144,104 @@ function analyzePageContextOnce() {
   return { contextType: "other" };
 }
 
+function debugLog(...args) {
+  if (DEBUG_HEADLINE) {
+    console.log(...args);
+  }
+}
+
+// Stratégie headline:
+// 1) Sélecteurs DOM modernes LinkedIn (data-anonymize, top-card)
+// 2) Métadonnées og:description / meta description
+// 3) Document title en dernier recours
+function readProfileHeadline() {
+  const selectors = [
+    '[data-anonymize="headline"]',
+    '.pv-text-details__left-panel .text-body-medium',
+    '.pv-text-details__left-panel .text-body-small',
+    '.pv-text-details__right-panel .text-body-medium',
+    '.pv-text-details__right-panel .text-body-small',
+    '.text-body-medium.break-words',
+    '.text-body-medium',
+    'div[class*="text-body-medium"]',
+    'section.pv-top-card h2',
+    'section.pv-top-card span.text-body-medium',
+    'main h2[data-anonymize="headline"]',
+    'main [data-anonymize="headline"]',
+    'main h2',
+    'main [dir="ltr"]'
+  ];
+
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (DEBUG_HEADLINE) debugLog("[LeadTracker][DEBUG] Headline selector:", selector, el ? el.innerText : 'null');
+    if (el && el.innerText?.trim()) {
+      return el.innerText.trim();
+    }
+  }
+
+  // Fallback métadonnées
+  const metaHeadline = readHeadlineFromMeta();
+  if (metaHeadline) {
+    debugLog("[LeadTracker][DEBUG] Headline from meta:", metaHeadline);
+    return metaHeadline;
+  }
+
+  debugLog("[LeadTracker][DEBUG] Headline toujours vide après sélecteurs et métas.");
+  return "";
+}
+
+function readHeadlineFromMeta() {
+  const metaOg = document.querySelector('meta[property="og:description"]')?.content || '';
+  const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+  const candidates = [metaOg, metaDesc, document.title || ''];
+
+  for (const raw of candidates) {
+    const candidate = (raw || '').trim();
+    if (!candidate) continue;
+    // LinkedIn sépare souvent par " | " ou " – "
+    const parts = candidate.split(/[\|\u2013-]/).map(p => p.trim()).filter(Boolean);
+    const best = parts.length ? parts[0] : candidate;
+    if (best) return best;
+  }
+  return "";
+}
+
+function readProfileName() {
+  const selectors = [
+    '.pv-text-details__left-panel h1',
+    '[data-anonymize="person-name"]',
+    '.text-heading-xlarge',
+    'h1.text-heading-xlarge',
+    'h1[class*="text-heading"]',
+    'main h1',
+    'h1'
+  ];
+
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (DEBUG_HEADLINE) debugLog("[LeadTracker][DEBUG] Name selector:", selector, el ? el.innerText : 'null');
+    if (el && el.innerText?.trim()) {
+      return el.innerText.trim();
+    }
+  }
+
+  // Fallback depuis l'URL
+  try {
+    const urlObj = new URL(window.location.href);
+    const pathParts = urlObj.pathname.split('/');
+    const profileSlug = pathParts[pathParts.indexOf('in') + 1];
+    if (profileSlug) {
+      const nameFromUrl = decodeURIComponent(profileSlug)
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      return nameFromUrl;
+    }
+  } catch (e) {}
+
+  return null;
+}
 function readProfileHeadline() {
   const selectors = [
     '.text-body-medium.break-words',
