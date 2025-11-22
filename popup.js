@@ -161,6 +161,7 @@ async function safeGetContext(tabId) {
 async function tryInjectContentScript(tabId) {
   if (!chrome.scripting || !chrome.scripting.executeScript) {
     console.warn("[LeadTracker] chrome.scripting non disponible.");
+    showGlobalFeedback("Extension inactive sur cette page. Rafraîchissez la page LinkedIn.", 'warning');
     return false;
   }
   try {
