@@ -12,6 +12,8 @@ function getDaysDiff(dateString) {
 let allLeads = [];
 let allTitles = [];
 let isLoading = true;
+let currentPage = 1;
+const PAGE_SIZE = 10;
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
@@ -80,6 +82,7 @@ function getFilteredLeads() {
   const dateFrom = document.getElementById('filterDateFrom').value;
   const dateTo = document.getElementById('filterDateTo').value;
   const onlyToContact = document.getElementById('filterToContact').checked;
+  const keyword = (document.getElementById('filterKeyword').value || '').toLowerCase().trim();
 
   toggleFilterBadge(onlyToContact);
 
@@ -96,6 +99,15 @@ function getFilteredLeads() {
       if (days < 5 || days > 7) return false;
     }
 
+    if (keyword) {
+      const haystack = [
+        lead.name || '',
+        lead.headline || '',
+        lead.searchTitle || ''
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(keyword)) return false;
+    }
+
     return true;
   });
 }
@@ -106,12 +118,15 @@ function renderTable() {
   const emptyAll = document.getElementById('emptyAll');
   const emptyFiltered = document.getElementById('emptyFiltered');
   const loadingState = document.getElementById('loadingState');
+  const pagination = document.getElementById('pagination');
+  const pageInfo = document.getElementById('pageInfo');
 
   if (isLoading) {
     loadingState.classList.remove('hidden');
     tableWrapper.classList.add('hidden');
     emptyAll.classList.add('hidden');
     emptyFiltered.classList.add('hidden');
+    pagination.classList.add('hidden');
     return;
   } else {
     loadingState.classList.add('hidden');
@@ -123,6 +138,7 @@ function renderTable() {
     emptyAll.classList.remove('hidden');
     emptyFiltered.classList.add('hidden');
     tableWrapper.classList.add('hidden');
+    pagination.classList.add('hidden');
     return;
   } else {
     emptyAll.classList.add('hidden');
@@ -131,6 +147,7 @@ function renderTable() {
   if (filtered.length === 0) {
     emptyFiltered.classList.remove('hidden');
     tableWrapper.classList.add('hidden');
+    pagination.classList.add('hidden');
     return;
   } else {
     emptyFiltered.classList.add('hidden');
@@ -148,7 +165,12 @@ function renderTable() {
   };
   filtered.sort((a, b) => getSortValue(b) - getSortValue(a));
 
-  filtered.forEach(lead => {
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const paginated = filtered.slice(start, start + PAGE_SIZE);
+
+  paginated.forEach(lead => {
     const days = lead.acceptanceDate ? getDaysDiff(lead.acceptanceDate) : null;
     const tr = document.createElement('tr');
     
@@ -202,6 +224,16 @@ function renderTable() {
   document.querySelectorAll('.accept-lead').forEach(el => {
     el.addEventListener('click', handleAcceptLead);
   });
+
+  // Pagination controls
+  if (filtered.length > PAGE_SIZE) {
+    pagination.classList.remove('hidden');
+    pageInfo.textContent = `Page ${currentPage}/${totalPages}`;
+    document.getElementById('prevPage').disabled = currentPage === 1;
+    document.getElementById('nextPage').disabled = currentPage === totalPages;
+  } else {
+    pagination.classList.add('hidden');
+  }
 }
 
 async function handleContactChange(e) {
@@ -246,8 +278,13 @@ async function handleDeleteLead(e) {
 function setupEventListeners() {
   ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
+      currentPage = 1;
       renderTable();
     });
+  });
+  document.getElementById('filterKeyword').addEventListener('input', () => {
+    currentPage = 1;
+    renderTable();
   });
 
   document.getElementById('btnClear').addEventListener('click', async () => {
@@ -258,6 +295,22 @@ function setupEventListeners() {
       setFeedback('Toutes les données ont été supprimées.', 'success');
       renderTable();
       renderFilters();
+    }
+  });
+
+  document.getElementById('prevPage').addEventListener('click', () => {
+    if (currentPage > 1) {
+      currentPage -= 1;
+      renderTable();
+    }
+  });
+
+  document.getElementById('nextPage').addEventListener('click', () => {
+    const filtered = getFilteredLeads();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage < totalPages) {
+      currentPage += 1;
+      renderTable();
     }
   });
 

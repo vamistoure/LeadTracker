@@ -41,6 +41,10 @@
           <label for="filterDateTo">Acceptation - au</label>
           <input type="date" id="filterDateTo">
         </div>
+        <div class="filter">
+          <label for="filterKeyword">Recherche (mot-clé)</label>
+          <input type="text" id="filterKeyword" placeholder="Nom, headline ou titre">
+        </div>
         <div class="filter toggle">
           <label class="checkbox-label">
             <input type="checkbox" id="filterToContact">
@@ -88,6 +92,11 @@
           <tbody>
           </tbody>
         </table>
+        <div id="pagination" class="pagination hidden">
+          <button id="prevPage" class="btn ghost" type="button">Précédent</button>
+          <span id="pageInfo" class="page-info"></span>
+          <button id="nextPage" class="btn ghost" type="button">Suivant</button>
+        </div>
       </div>
     </section>
   </div>
