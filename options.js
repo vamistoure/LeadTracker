@@ -205,6 +205,9 @@ function renderTable() {
       <td>${lead.acceptanceDate || 'En attente'}</td>
       <td>${daysText}</td>
       <td><input type="checkbox" class="chk-contacted" data-id="${lead.id}" ${lead.contacted ? 'checked' : ''}></td>
+      <td>
+        <button class="btn-icon message-lead" data-id="${lead.id}" title="Générer un message">Message</button>
+      </td>
       <td class="actions-cell">
         ${lead.direction === 'outbound_pending' ? 
           `<button class="btn-icon accept-lead" data-id="${lead.id}" title="Marquer comme accepté">Accepter</button>` : 
@@ -225,16 +228,23 @@ function renderTable() {
   document.querySelectorAll('.accept-lead').forEach(el => {
     el.addEventListener('click', handleAcceptLead);
   });
+  document.querySelectorAll('.message-lead').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.getAttribute('data-id');
+      const lead = allLeads.find(l => l.id === id);
+      if (lead) showSuggestedMessage(lead);
+    });
+  });
 
   // Pagination controls
   if (filtered.length > PAGE_SIZE) {
     pagination.classList.remove('hidden');
-    pageInfo.textContent = `Page ${currentPage}/${totalPages}`;
-    document.getElementById('prevPage').disabled = currentPage === 1;
-    document.getElementById('nextPage').disabled = currentPage === totalPages;
-  } else {
-    pagination.classList.add('hidden');
-  }
+  pageInfo.textContent = `Page ${currentPage}/${totalPages}`;
+  document.getElementById('prevPage').disabled = currentPage === 1;
+  document.getElementById('nextPage').disabled = currentPage === totalPages;
+} else {
+  pagination.classList.add('hidden');
+}
 }
 
 async function handleContactChange(e) {
@@ -400,4 +410,73 @@ function setupEventListeners() {
       setFeedback('Erreur lors de la génération du CSV.', 'error');
     }
   });
+
+  document.getElementById('btnCopyMessage').addEventListener('click', async () => {
+    const textarea = document.getElementById('suggested-message');
+    const feedback = document.getElementById('messageFeedback');
+    if (!textarea) return;
+    try {
+      await navigator.clipboard.writeText(textarea.value || '');
+      feedback.classList.remove('hidden', 'error');
+      feedback.classList.add('success');
+      feedback.textContent = 'Message copié.';
+    } catch (e) {
+      console.error('Impossible de copier le message:', e);
+      feedback.classList.remove('hidden', 'success');
+      feedback.classList.add('error');
+      feedback.textContent = 'Impossible de copier le message.';
+    }
+  });
+}
+
+function extractFirstName(name) {
+  if (!name || typeof name !== 'string') return null;
+  const parts = name.trim().split(/\s+/);
+  return parts[0] || null;
+}
+
+function extractRoleFromHeadline(headline) {
+  if (!headline || typeof headline !== 'string') return null;
+  const separators = [' chez ', ' at ', ' | ', ' – ', ' - '];
+  let selected = headline;
+  for (const sep of separators) {
+    if (headline.toLowerCase().includes(sep.trim())) {
+      const idx = headline.toLowerCase().indexOf(sep.trim());
+      selected = headline.substring(0, idx).trim();
+      break;
+    }
+  }
+  return selected || null;
+}
+
+function buildSuggestedMessage(lead) {
+  const firstName = extractFirstName(lead.name) || "là";
+  const role = extractRoleFromHeadline(lead.headline);
+  const isInbound = lead.direction === 'inbound_accepted';
+
+  const lines = [];
+  lines.push(`Hello ${firstName},`);
+  lines.push(isInbound ? "Merci pour ta demande de connexion." : "Merci d'avoir accepté ma demande de connexion.");
+  lines.push("J'essaie de connecter davantage avec mon réseau sur LinkedIn.");
+  if (role) {
+    lines.push(`J'ai vu que tu étais ${role} et je trouve ça intéressant par rapport à ce que je fais.`);
+  }
+  lines.push("Serais-tu dispo à l'occasion pour papoter 15 min et voir ce qu'on peut s'apporter mutuellement ?");
+  lines.push("Je te propose mardi à 12:00 ou jeudi à 13:30, mais je peux m'adapter à tes disponibilités.");
+
+  return lines.join('\n');
+}
+
+function showSuggestedMessage(lead) {
+  if (!lead) return;
+  const section = document.getElementById('messageSection');
+  const title = document.getElementById('messageTitle');
+  const textarea = document.getElementById('suggested-message');
+  const feedback = document.getElementById('messageFeedback');
+  if (!section || !title || !textarea || !feedback) return;
+
+  title.textContent = `Message suggéré pour ${lead.name || 'ce lead'}`;
+  textarea.value = buildSuggestedMessage(lead);
+  feedback.classList.add('hidden');
+  section.classList.remove('hidden');
 }

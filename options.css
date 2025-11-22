@@ -349,6 +349,30 @@ tbody tr.highlight-contact {
   color: #475569;
 }
 
+.message-section {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.message-textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  min-height: 140px;
+  resize: vertical;
+}
+
+.message-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

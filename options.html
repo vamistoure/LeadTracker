@@ -81,24 +81,36 @@
             <tr>
               <th>Nom</th>
               <th>Top</th>
-              <th>Titre de recherche</th>
-              <th>Type</th>
-              <th>Demande</th>
-              <th>Acceptation</th>
-              <th>Jours depuis</th>
-              <th>Contacté</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
-        <div id="pagination" class="pagination hidden">
-          <button id="prevPage" class="btn ghost" type="button">Précédent</button>
-          <span id="pageInfo" class="page-info"></span>
-          <button id="nextPage" class="btn ghost" type="button">Suivant</button>
-        </div>
+            <th>Titre de recherche</th>
+            <th>Type</th>
+            <th>Demande</th>
+            <th>Acceptation</th>
+            <th>Jours depuis</th>
+            <th>Contacté</th>
+            <th>Message</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+      <div id="pagination" class="pagination hidden">
+        <button id="prevPage" class="btn ghost" type="button">Précédent</button>
+        <span id="pageInfo" class="page-info"></span>
+        <button id="nextPage" class="btn ghost" type="button">Suivant</button>
       </div>
+    </div>
+
+    <section class="card message-section hidden" id="messageSection">
+      <div class="card-header">
+        <div class="card-title" id="messageTitle">Message suggéré</div>
+      </div>
+      <textarea id="suggested-message" rows="6" class="message-textarea"></textarea>
+      <div class="message-actions">
+        <button id="btnCopyMessage" class="btn primary" type="button">Copier le message</button>
+        <div id="messageFeedback" class="feedback hidden" role="status"></div>
+      </div>
+    </section>
     </section>
   </div>
 
