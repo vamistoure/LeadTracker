@@ -129,6 +129,35 @@
       </div>
     </div>
 
+    <!-- Vue Lead existant -->
+    <div id="view-existing" class="view hidden">
+      <div class="panel existing-card">
+        <div class="existing-header">
+          <div>
+            <div id="existingName" class="existing-name"></div>
+            <div id="existingHeadline" class="existing-headline"></div>
+          </div>
+          <span id="existingStatus" class="status-badge"></span>
+        </div>
+
+        <div class="existing-meta">
+          <div><span class="meta-label">Titre de recherche :</span> <span id="existingSearchTitle"></span></div>
+          <div><span class="meta-label">Type :</span> <span id="existingDirection"></span></div>
+          <div><span class="meta-label">Demande :</span> <span id="existingRequestDate"></span></div>
+          <div><span class="meta-label">Acceptation :</span> <span id="existingAcceptanceDate"></span></div>
+          <div><span class="meta-label">Contact :</span> <span id="existingContactDate"></span></div>
+        </div>
+
+        <div id="existingMessage" class="existing-message"></div>
+
+        <div class="actions stacked">
+          <button id="btnExistingPrimary" class="btn primary full"></button>
+          <button id="btnExistingSecondary" class="btn ghost full hidden"></button>
+          <button id="btnExistingDashboard" class="btn ghost full">Voir dans le dashboard</button>
+        </div>
+      </div>
+    </div>
+
     <div id="view-other" class="view hidden">
       <div class="panel center">
         <div class="panel-title">Page non prise en charge</div>

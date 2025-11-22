@@ -18,6 +18,15 @@ const formatTitle = (label = "") => {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 };
+const formatDisplayDate = (dateString) => dateString || '–';
+function getDaysDiff(dateString) {
+  if (!dateString) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(dateString);
+  d.setHours(0, 0, 0, 0);
+  return Math.floor((today - d) / (1000 * 60 * 60 * 24));
+}
 
 function showFeedback(elementId, message, type = 'info') {
   const feedback = getById(elementId);
@@ -34,6 +43,86 @@ function showFeedback(elementId, message, type = 'info') {
   if (type === 'success') {
     setTimeout(() => feedback.classList.add('hidden'), 2500);
   }
+}
+
+function computeExistingState(lead) {
+  if (!lead.acceptanceDate) return 'pending';
+  if (!lead.contacted) return 'to_contact';
+  return 'contacted';
+}
+
+function formatDirection(direction) {
+  if (direction === 'outbound_pending') return 'Demande envoyée (en attente)';
+  if (direction === 'outbound_accepted') return 'Outbound (acceptée)';
+  if (direction === 'inbound_accepted') return 'Inbound (reçue)';
+  return direction || 'Inconnu';
+}
+
+async function updateExistingLead(updates) {
+  try {
+    const storage = await chrome.storage.local.get(['leads']);
+    let leads = storage.leads || [];
+    const idx = leads.findIndex(l => l.id === currentExistingLead?.id);
+    if (idx === -1) return;
+    leads[idx] = {
+      ...leads[idx],
+      ...updates
+    };
+    await chrome.storage.local.set({ leads });
+    currentExistingLead = leads[idx];
+    renderExistingLead(currentExistingLead);
+  } catch (e) {
+    console.error("[LeadTracker] Erreur mise à jour lead existant:", e);
+  }
+}
+
+function renderExistingLead(lead) {
+  if (!lead) return;
+  currentExistingLead = lead;
+  currentExistingState = computeExistingState(lead);
+  showView('view-existing');
+
+  getById('existingName').textContent = lead.name || 'Inconnu';
+  getById('existingHeadline').textContent = lead.headline || '';
+  getById('existingSearchTitle').textContent = lead.searchTitle || '–';
+  getById('existingDirection').textContent = formatDirection(lead.direction);
+  getById('existingRequestDate').textContent = formatDisplayDate(lead.requestDate);
+  getById('existingAcceptanceDate').textContent = formatDisplayDate(lead.acceptanceDate);
+  getById('existingContactDate').textContent = formatDisplayDate(lead.contactedDate);
+
+  const statusEl = getById('existingStatus');
+  statusEl.className = 'status-badge';
+  const messageEl = getById('existingMessage');
+  const primaryBtn = getById('btnExistingPrimary');
+  const secondaryBtn = getById('btnExistingSecondary');
+
+  let statusText = '';
+  let messageText = '';
+  secondaryBtn.classList.add('hidden');
+
+  if (currentExistingState === 'pending') {
+    statusText = 'En attente';
+    statusEl.classList.add('pending');
+    messageText = `Demande envoyée le ${formatDisplayDate(lead.requestDate)} – en attente d’acceptation.`;
+    primaryBtn.textContent = 'Ils ont accepté ma demande';
+  } else if (currentExistingState === 'to_contact') {
+    statusText = 'À contacter';
+    statusEl.classList.add('to-contact');
+    const days = getDaysDiff(lead.acceptanceDate);
+    const dayText = days !== null ? ` (J+${days})` : '';
+    messageText = `Connexion acceptée le ${formatDisplayDate(lead.acceptanceDate)}${dayText}. Tu n’as pas encore contacté ce lead.`;
+    primaryBtn.textContent = 'Marquer comme contacté aujourd’hui';
+  } else {
+    statusText = 'Contacté';
+    statusEl.classList.add('contacted');
+    messageText = `Lead contacté le ${formatDisplayDate(lead.contactedDate)}.`;
+    primaryBtn.textContent = 'Mettre à jour la date de contact';
+    secondaryBtn.textContent = 'Marquer comme non contacté';
+    secondaryBtn.classList.remove('hidden');
+  }
+
+  statusEl.textContent = statusText;
+  messageEl.textContent = messageText;
 }
 
 const showGlobalFeedback = (message, type = 'info') => {
@@ -63,6 +152,18 @@ function setButtonLoading(buttonId, isLoading) {
 let currentContext = null;
 let existingLeadId = null; // ID du lead existant si on est en mode mise à jour
 let isFromConnectButton = false; // Flag pour indiquer si le contexte vient d'un clic sur Connect
+let currentExistingLead = null;
+let currentExistingState = null;
+
+const formatDisplayDate = (dateString) => dateString || '–';
+function getDaysDiff(dateString) {
+  if (!dateString) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(dateString);
+  d.setHours(0, 0, 0, 0);
+  return Math.floor((today - d) / (1000 * 60 * 60 * 24));
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   showView('loading');
@@ -257,36 +358,9 @@ async function initProfileView(context) {
 
   if (existingLead) {
     existingLeadId = existingLead.id;
-    
-    select.value = existingLead.searchTitle;
-    if (!titles.some(t => t.label === existingLead.searchTitle)) {
-      select.value = '__custom__';
-      getById('customTitleInput').value = existingLead.searchTitle;
-      getById('customTitleInput').classList.remove('hidden');
-    }
-    
-    const connectionRadio = document.querySelector(`input[name="connectionType"][value="${existingLead.direction}"]`);
-    if (connectionRadio) connectionRadio.checked = true;
-    
-    if (existingLead.requestDate) {
-      getById('requestDate').value = existingLead.requestDate;
-    } else {
-      getById('requestDate').value = getTodayDate();
-    }
-    
-    if (existingLead.acceptanceDate) {
-      getById('acceptanceDate').value = existingLead.acceptanceDate;
-      getById('acceptanceDateRequired').style.display = 'inline';
-    } else {
-      getById('acceptanceDate').value = '';
-      getById('acceptanceDateRequired').style.display = 'none';
-    }
-    
-    getById('isContacted').checked = existingLead.contacted || false;
-    const topLeadCheckbox = getById('isTopLead');
-    if (topLeadCheckbox) topLeadCheckbox.checked = !!existingLead.topLead;
-    
-    showFeedback('leadFeedback', 'Lead déjà enregistré. Mettez à jour si besoin.', 'info');
+    currentExistingLead = existingLead;
+    renderExistingLead(existingLead);
+    return;
   } else {
     existingLeadId = null;
     getById('requestDate').value = getTodayDate();
@@ -314,6 +388,10 @@ function setupEventListeners() {
       btn.addEventListener('click', () => chrome.runtime.openOptionsPage());
     }
   });
+  const btnExistingDashboard = getById('btnExistingDashboard');
+  if (btnExistingDashboard) {
+    btnExistingDashboard.addEventListener('click', () => chrome.runtime.openOptionsPage());
+  }
 
   // -- RECHERCHE : Save --
   const btnSaveSearch = getById('btnSaveSearch');
@@ -357,6 +435,44 @@ function setupEventListeners() {
         setButtonLoading('btnSaveSearch', false);
         showFeedback('searchFeedback', 'Erreur lors de l\'enregistrement.', 'error');
         console.error('Erreur sauvegarde titre:', error);
+      }
+    });
+  }
+
+  const btnExistingPrimary = getById('btnExistingPrimary');
+  if (btnExistingPrimary) {
+    btnExistingPrimary.addEventListener('click', async () => {
+      if (!currentExistingLead) return;
+      const state = computeExistingState(currentExistingLead);
+      if (state === 'pending') {
+        await updateExistingLead({
+          acceptanceDate: getTodayDate(),
+          direction: currentExistingLead.direction === 'outbound_pending' ? 'outbound_accepted' : currentExistingLead.direction
+        });
+      } else if (state === 'to_contact') {
+        await updateExistingLead({
+          contacted: true,
+          contactedDate: getTodayDate()
+        });
+      } else if (state === 'contacted') {
+        await updateExistingLead({
+          contacted: true,
+          contactedDate: getTodayDate()
+        });
+      }
+    });
+  }
+
+  const btnExistingSecondary = getById('btnExistingSecondary');
+  if (btnExistingSecondary) {
+    btnExistingSecondary.addEventListener('click', async () => {
+      if (!currentExistingLead) return;
+      const state = computeExistingState(currentExistingLead);
+      if (state === 'contacted') {
+        await updateExistingLead({
+          contacted: false,
+          contactedDate: null
+        });
       }
     });
   }
