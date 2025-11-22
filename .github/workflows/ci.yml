@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate manifest.json syntax
+        run: |
+          python -m json.tool manifest.json > /tmp/manifest.json
+          mv /tmp/manifest.json manifest.json
+
+      - name: Package extension
+        run: |
+          mkdir -p dist
+          zip -r dist/leadtracker.zip . \
+            -x ".git/*" ".github/*" "dist/*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leadtracker-extension
+          path: dist/leadtracker.zip
