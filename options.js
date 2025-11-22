@@ -81,6 +81,8 @@ function getFilteredLeads() {
   const searchTitle = document.getElementById('filterSearchTitle').value;
   const dateFrom = document.getElementById('filterDateFrom').value;
   const dateTo = document.getElementById('filterDateTo').value;
+  const createdFrom = document.getElementById('filterCreatedFrom').value;
+  const createdTo = document.getElementById('filterCreatedTo').value;
   const onlyToContact = document.getElementById('filterToContact').checked;
   const keyword = (document.getElementById('filterKeyword').value || '').toLowerCase().trim();
 
@@ -91,6 +93,15 @@ function getFilteredLeads() {
 
     if (dateFrom && lead.acceptanceDate && lead.acceptanceDate < dateFrom) return false;
     if (dateTo && lead.acceptanceDate && lead.acceptanceDate > dateTo) return false;
+
+    if (createdFrom && lead.createdAt) {
+      const created = new Date(lead.createdAt).toISOString().slice(0,10);
+      if (created < createdFrom) return false;
+    }
+    if (createdTo && lead.createdAt) {
+      const created = new Date(lead.createdAt).toISOString().slice(0,10);
+      if (created > createdTo) return false;
+    }
 
     if (onlyToContact) {
       if (lead.contacted) return false;
@@ -287,7 +298,7 @@ async function handleDeleteLead(e) {
 }
 
 function setupEventListeners() {
-  ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact'].forEach(id => {
+  ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact', 'filterCreatedFrom', 'filterCreatedTo'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
       currentPage = 1;
       renderTable();
