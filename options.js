@@ -261,6 +261,36 @@ function setupEventListeners() {
     }
   });
 
+  document.getElementById('btnExportJson').addEventListener('click', async () => {
+    try {
+      const data = await chrome.storage.local.get(['leads', 'searchTitles']);
+      const backup = {
+        exportedAt: new Date().toISOString(),
+        leads: data.leads || [],
+        searchTitles: data.searchTitles || []
+      };
+
+      const jsonString = JSON.stringify(backup, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const filename = `linkedin-leads-backup-${new Date().toISOString().slice(0,10)}.json`;
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setFeedback('Export JSON généré.', 'success');
+    } catch (error) {
+      console.error('Erreur export JSON:', error);
+      setFeedback('Erreur lors de l\'export JSON.', 'error');
+      alert("Erreur lors de l’export JSON.");
+    }
+  });
+
   document.getElementById('btnExport').addEventListener('click', () => {
     try {
       const filtered = getFilteredLeads();
