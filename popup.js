@@ -99,6 +99,7 @@ function renderExistingLead(lead) {
   let statusText = '';
   let messageText = '';
   secondaryBtn.classList.add('hidden');
+  secondaryBtn.textContent = '';
 
   if (currentExistingState === 'pending') {
     statusText = 'En attente';

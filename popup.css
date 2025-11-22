@@ -325,6 +325,8 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.08);
 }
 
 .existing-header {
@@ -354,6 +356,8 @@ select:focus {
   color: #4338ca;
   border: 1px solid #c7d2fe;
   align-self: flex-start;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .status-badge.pending {
@@ -385,6 +389,8 @@ select:focus {
 .meta-label {
   color: #64748b;
   font-weight: 600;
+  display: inline-block;
+  min-width: 110px;
 }
 
 .existing-message {
@@ -394,10 +400,20 @@ select:focus {
   padding: 10px 12px;
   font-size: 13px;
   color: #0f172a;
+  line-height: 1.4;
 }
 
 .actions.stacked {
   flex-direction: column;
+}
+
+.subtle-link {
+  background: #fff;
+  border-color: #e2e8f0;
+}
+
+.subtle-link:hover {
+  background: #f8fafc;
 }
 
 @keyframes spin {
