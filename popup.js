@@ -10,13 +10,7 @@ const showView = (id) => {
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 const formatTitle = (label = "") => {
   const trimmed = label.trim();
-  if (trimmed.length > 4) {
-    return trimmed.toUpperCase();
-  }
-  return trimmed
-    .split(/\s+/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+  return trimmed.toUpperCase();
 };
 const formatDisplayDate = (dateString) => dateString || '–';
 function getDaysDiff(dateString) {
