@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>LeadTracker - Dashboard</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div>
+        <div class="app-title">LeadTracker</div>
+        <div class="app-subtitle">Dashboard de suivi des leads LinkedIn</div>
+      </div>
+      <div class="top-actions">
+        <button id="btnExport" class="btn primary">Exporter CSV</button>
+        <button id="btnClear" class="btn danger">Tout supprimer</button>
+      </div>
+    </header>
+
+    <div id="optionsFeedback" class="feedback hidden" role="status"></div>
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title">Filtres</div>
+        <div id="filterBadge" class="badge hidden">Filtre "À contacter maintenant" actif</div>
+      </div>
+      <div class="filters">
+        <div class="filter">
+          <label for="filterSearchTitle">Titre de recherche</label>
+          <select id="filterSearchTitle">
+            <option value="all">Tous les titres</option>
+          </select>
+        </div>
+        <div class="filter">
+          <label for="filterDateFrom">Acceptation - du</label>
+          <input type="date" id="filterDateFrom">
+        </div>
+        <div class="filter">
+          <label for="filterDateTo">Acceptation - au</label>
+          <input type="date" id="filterDateTo">
+        </div>
+        <div class="filter toggle">
+          <label class="checkbox-label">
+            <input type="checkbox" id="filterToContact">
+            Afficher uniquement les leads à contacter maintenant (J+5 à J+7)
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title">Leads</div>
+        <div class="card-subtitle muted">Mettez à jour les statuts ou exportez vos données.</div>
+      </div>
+
+      <div id="loadingState" class="empty-state">
+        <div class="spinner"></div>
+        <div>Chargement des données...</div>
+      </div>
+
+      <div id="emptyAll" class="empty-state hidden">
+        <div class="empty-title">Vous n'avez encore aucun lead enregistré.</div>
+        <div class="empty-text">Ajoutez des leads depuis un profil LinkedIn via le popup de l'extension.</div>
+      </div>
+
+      <div id="emptyFiltered" class="empty-state hidden">
+        <div class="empty-title">Aucun lead ne correspond aux filtres actuels.</div>
+        <div class="empty-text">Modifiez ou désactivez certains filtres pour élargir les résultats.</div>
+      </div>
+
+      <div id="tableWrapper" class="table-wrapper hidden">
+        <table id="leadsTable">
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Titre de recherche</th>
+              <th>Type</th>
+              <th>Demande</th>
+              <th>Acceptation</th>
+              <th>Jours depuis</th>
+              <th>Contacté</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
