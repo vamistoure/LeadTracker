@@ -217,6 +217,9 @@ thead th {
   font-weight: 700;
   color: #0f172a;
 }
+.sortable {
+  cursor: pointer;
+}
 
 tbody td {
   padding: 12px 14px;

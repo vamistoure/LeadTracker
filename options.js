@@ -156,7 +156,34 @@ function renderTable() {
 
   tbody.innerHTML = '';
 
-  filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const sortValue = (lead) => {
+    switch (currentSortColumn) {
+      case 'name': return (lead.name || '').toLowerCase();
+      case 'searchTitle': return (lead.searchTitle || '').toLowerCase();
+      case 'direction': return (lead.direction || '').toLowerCase();
+      case 'requestDate': return lead.requestDate || '';
+      case 'acceptanceDate': return lead.acceptanceDate || '';
+      case 'days': {
+        const days = lead.acceptanceDate ? getDaysDiff(lead.acceptanceDate) : null;
+        return days === null ? Number.NEGATIVE_INFINITY : days;
+      }
+      case 'contacted': return lead.contacted ? 1 : 0;
+      case 'topLead': return lead.topLead ? 1 : 0;
+      case 'createdAt':
+      default:
+        return lead.createdAt || 0;
+    }
+  };
+
+  filtered.sort((a, b) => {
+    const va = sortValue(a);
+    const vb = sortValue(b);
+    if (va === vb) return 0;
+    if (currentSortDir === 'asc') {
+      return va > vb ? 1 : -1;
+    }
+    return va < vb ? 1 : -1;
+  });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
@@ -280,7 +307,7 @@ async function handleDeleteLead(e) {
 }
 
 function setupEventListeners() {
-  ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact'].forEach(id => {
+  ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact', 'filterCreatedFrom', 'filterCreatedTo'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
       currentPage = 1;
       renderTable();
@@ -289,6 +316,20 @@ function setupEventListeners() {
   document.getElementById('filterKeyword').addEventListener('input', () => {
     currentPage = 1;
     renderTable();
+  });
+
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.getAttribute('data-sort');
+      if (currentSortColumn === col) {
+        currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSortColumn = col;
+        currentSortDir = col === 'createdAt' ? 'desc' : 'asc';
+      }
+      currentPage = 1;
+      renderTable();
+    });
   });
 
   document.getElementById('btnClear').addEventListener('click', async () => {
