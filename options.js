@@ -198,6 +198,7 @@ function renderTable() {
           <span class="profile-headline">${lead.headline ? (lead.headline.substring(0, 60) + (lead.headline.length > 60 ? '...' : '')) : ''}</span>
         </div>
       </td>
+      <td>${lead.topLead ? '★' : ''}</td>
       <td>${lead.searchTitle}</td>
       <td>${statusText}</td>
       <td>${lead.requestDate || '-'}</td>
@@ -377,11 +378,13 @@ function setupEventListeners() {
           l.acceptanceDate ? getDaysDiff(l.acceptanceDate) : '-',
           l.contacted ? 'Oui' : 'Non',
           l.contactedDate || '',
-          new Date(l.createdAt).toLocaleDateString()
+          new Date(l.createdAt).toLocaleDateString(),
+          l.topLead ? 'Oui' : 'Non'
         ];
       });
 
-      const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const csvHeaders = [...headers, "Top Lead"];
+      const csvContent = "\uFEFF" + [csvHeaders.join(','), ...rows.map(r => r.join(','))].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

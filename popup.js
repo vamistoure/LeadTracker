@@ -283,6 +283,8 @@ async function initProfileView(context) {
     }
     
     getById('isContacted').checked = existingLead.contacted || false;
+    const topLeadCheckbox = getById('isTopLead');
+    if (topLeadCheckbox) topLeadCheckbox.checked = !!existingLead.topLead;
     
     showFeedback('leadFeedback', 'Lead déjà enregistré. Mettez à jour si besoin.', 'info');
   } else {
@@ -291,6 +293,8 @@ async function initProfileView(context) {
     getById('acceptanceDate').value = '';
     getById('acceptanceDateRequired').style.display = 'none';
     getById('isContacted').checked = false;
+    const topLeadCheckbox = getById('isTopLead');
+    if (topLeadCheckbox) topLeadCheckbox.checked = false;
     
     if (isFromConnectButton) {
       showFeedback('leadFeedback', 'Profil détecté après votre clic sur \"Connect\". Complétez puis enregistrez.', 'info');
@@ -416,6 +420,7 @@ function setupEventListeners() {
       const acceptanceDate = getById('acceptanceDate').value || null;
       const requestDate = getById('requestDate').value || null;
       const isContacted = getById('isContacted').checked;
+      const isTopLead = getById('isTopLead')?.checked || false;
 
       if (!searchTitle || searchTitle === "") {
         showFeedback('leadFeedback', 'Le titre de recherche est obligatoire.', 'error');
@@ -475,7 +480,8 @@ function setupEventListeners() {
           requestDate: requestDate,
           acceptanceDate: acceptanceDate,
           contacted: isContacted,
-          contactedDate: contactedDate
+          contactedDate: contactedDate,
+          topLead: isTopLead
         };
 
         if (targetIndex !== -1) {
