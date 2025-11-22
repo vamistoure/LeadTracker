@@ -335,6 +335,20 @@ tbody tr.highlight-contact {
   display: none;
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  justify-content: center;
+  border-top: 1px solid #e2e8f0;
+}
+
+.page-info {
+  font-size: 13px;
+  color: #475569;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
