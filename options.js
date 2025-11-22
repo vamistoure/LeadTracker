@@ -81,8 +81,6 @@ function getFilteredLeads() {
   const searchTitle = document.getElementById('filterSearchTitle').value;
   const dateFrom = document.getElementById('filterDateFrom').value;
   const dateTo = document.getElementById('filterDateTo').value;
-  const createdFrom = document.getElementById('filterCreatedFrom').value;
-  const createdTo = document.getElementById('filterCreatedTo').value;
   const onlyToContact = document.getElementById('filterToContact').checked;
   const keyword = (document.getElementById('filterKeyword').value || '').toLowerCase().trim();
 
@@ -93,15 +91,6 @@ function getFilteredLeads() {
 
     if (dateFrom && lead.acceptanceDate && lead.acceptanceDate < dateFrom) return false;
     if (dateTo && lead.acceptanceDate && lead.acceptanceDate > dateTo) return false;
-
-    if (createdFrom && lead.createdAt) {
-      const created = new Date(lead.createdAt).toISOString().slice(0,10);
-      if (created < createdFrom) return false;
-    }
-    if (createdTo && lead.createdAt) {
-      const created = new Date(lead.createdAt).toISOString().slice(0,10);
-      if (created > createdTo) return false;
-    }
 
     if (onlyToContact) {
       if (lead.contacted) return false;
@@ -167,14 +156,7 @@ function renderTable() {
 
   tbody.innerHTML = '';
 
-  const getSortValue = (lead) => {
-    if (lead.acceptanceDate) {
-      const time = new Date(lead.acceptanceDate).getTime();
-      if (!isNaN(time)) return time;
-    }
-    return -Infinity;
-  };
-  filtered.sort((a, b) => getSortValue(b) - getSortValue(a));
+  filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
@@ -298,7 +280,7 @@ async function handleDeleteLead(e) {
 }
 
 function setupEventListeners() {
-  ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact', 'filterCreatedFrom', 'filterCreatedTo'].forEach(id => {
+  ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
       currentPage = 1;
       renderTable();
