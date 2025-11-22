@@ -8,6 +8,13 @@ const showView = (id) => {
 };
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
+const formatTitle = (label = "") => {
+  return label
+    .trim()
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
 
 function showFeedback(elementId, message, type = 'info') {
   const feedback = getById(elementId);
@@ -218,7 +225,10 @@ async function initProfileView(context) {
   const existingLead = leads.find(l => l.profileUrl === context.profileUrl);
   
   // Charger les titres de recherche
-  const titles = storage.searchTitles || [];
+  const titles = (storage.searchTitles || []).map(t => ({
+    ...t,
+    formattedLabel: formatTitle(t.label || '')
+  })).sort((a, b) => a.formattedLabel.localeCompare(b.formattedLabel));
   
   const select = getById('searchTitleSelect');
   select.innerHTML = '<option value="" disabled selected>Choisir...</option>';
@@ -226,7 +236,7 @@ async function initProfileView(context) {
   titles.forEach(t => {
     const opt = document.createElement('option');
     opt.value = t.label;
-    opt.textContent = t.label;
+    opt.textContent = t.formattedLabel || t.label;
     select.appendChild(opt);
   });
 
@@ -302,7 +312,8 @@ function setupEventListeners() {
   const btnSaveSearch = getById('btnSaveSearch');
   if (btnSaveSearch) {
     btnSaveSearch.addEventListener('click', async () => {
-      const label = getById('searchTitleInput').value.trim();
+      const rawLabel = getById('searchTitleInput').value.trim();
+      const label = formatTitle(rawLabel);
       if (!label) {
         showFeedback('searchFeedback', 'Veuillez saisir un titre de recherche.', 'error');
         return;
@@ -393,7 +404,9 @@ function setupEventListeners() {
     btnSaveLead.addEventListener('click', async () => {
       let searchTitle = select.value;
       if (searchTitle === '__custom__') {
-        searchTitle = customInput.value.trim();
+        searchTitle = formatTitle(customInput.value.trim());
+      } else {
+        searchTitle = formatTitle(searchTitle);
       }
 
       const connectionType = document.querySelector('input[name="connectionType"]:checked').value;
@@ -421,7 +434,7 @@ function setupEventListeners() {
           if (!exists) {
             titles.push({
               id: Date.now() + '_custom',
-              label: searchTitle,
+              label: formatTitle(searchTitle),
               createdAt: Date.now()
             });
             await chrome.storage.local.set({ searchTitles: titles });
