@@ -102,8 +102,14 @@ function getFilteredLeads() {
   return allLeads.filter(lead => {
     if (searchTitle !== 'all' && normalizeTitle(lead.searchTitle) !== searchTitle) return false;
 
-    if (dateFrom && lead.acceptanceDate && lead.acceptanceDate < dateFrom) return false;
-    if (dateTo && lead.acceptanceDate && lead.acceptanceDate > dateTo) return false;
+    if (dateFrom) {
+      if (!lead.acceptanceDate) return false;
+      if (new Date(lead.acceptanceDate).getTime() < new Date(dateFrom).getTime()) return false;
+    }
+    if (dateTo) {
+      if (!lead.acceptanceDate) return false;
+      if (new Date(lead.acceptanceDate).getTime() > new Date(dateTo).getTime()) return false;
+    }
 
     if (onlyToContact) {
       if (lead.contacted) return false;
