@@ -310,6 +310,22 @@ function setupEventListeners() {
     renderTable();
   });
 
+  const resetFilters = () => {
+    document.getElementById('filterSearchTitle').value = 'all';
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    document.getElementById('filterCreatedFrom').value = '';
+    document.getElementById('filterCreatedTo').value = '';
+    document.getElementById('filterKeyword').value = '';
+    document.getElementById('filterToContact').checked = false;
+    currentPage = 1;
+    renderTable();
+  };
+  const btnReset = document.getElementById('btnResetFilters');
+  if (btnReset) {
+    btnReset.addEventListener('click', resetFilters);
+  }
+
   document.getElementById('btnClear').addEventListener('click', async () => {
     if (confirm("Tout supprimer (leads et titres) ? Cette action est irréversible.")) {
       await chrome.storage.local.clear();
