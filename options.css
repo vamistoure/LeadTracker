@@ -438,8 +438,8 @@ tbody tr.highlight-contact {
 
 .modal-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 14px;
 }
 
 .modal-grid label {
@@ -449,6 +449,7 @@ tbody tr.highlight-contact {
   font-size: 12px;
   color: #475569;
   font-weight: 600;
+  align-self: stretch;
 }
 
 .modal-grid input,
@@ -464,7 +465,8 @@ tbody tr.highlight-contact {
 .checkbox-inline {
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 22px;
 }
 
 .checkbox-inline input {
