@@ -500,11 +500,11 @@ function nextWorkingDaySlots() {
   }
 
   const formatSlot = (date, hour, minute) => {
-    const opts = { weekday: 'long', month: 'long', day: 'numeric' };
-    const dateStr = date.toLocaleDateString(undefined, opts);
+    const day = date.getDate();
+    const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
     const hh = hour.toString().padStart(2, '0');
     const mm = minute.toString().padStart(2, '0');
-    return `${dateStr} à ${hh}h${mm}`;
+    return `${weekday} ${day} à ${hh}h${mm}`;
   };
 
   return [
