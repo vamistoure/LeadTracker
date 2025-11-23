@@ -222,6 +222,10 @@ function renderTable() {
       <td>
         <div class="actions-inline">
           <button class="btn-icon message-lead" data-id="${lead.id}" title="Message">✉️</button>
+        </div>
+      </td>
+      <td>
+        <div class="actions-inline">
           ${lead.direction === 'outbound_pending' ? 
             `<button class="btn-icon accept-lead" data-id="${lead.id}" title="Marquer comme accepté">✔️</button>` : 
             ''
