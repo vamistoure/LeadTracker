@@ -205,7 +205,6 @@ function renderTable() {
     const daysText = days !== null ? `J+${days}` : '-';
 
     tr.innerHTML = `
-      <td>${lead.company || '-'}</td>
       <td>
         <div class="profile-cell">
           <a href="${lead.profileUrl}" target="_blank" class="profile-name">${lead.name || 'Inconnu'}</a>
@@ -213,6 +212,7 @@ function renderTable() {
         </div>
       </td>
       <td>${lead.topLead ? '★' : ''}</td>
+      <td>${lead.company || '-'}</td>
       <td>${formatTitle(lead.searchTitle)}</td>
       <td>${statusText}</td>
       <td>${lead.requestDate || '-'}</td>
