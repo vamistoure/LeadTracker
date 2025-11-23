@@ -48,7 +48,7 @@ function checkLeadsForNotification() {
       
       const days = getDaysDifference(lead.acceptanceDate);
       // Critères : Pas encore contacté ET entre 5 et 7 jours après acceptation
-      if (!lead.contacted && days >= 5 && days <= 7) {
+      if (!lead.contacted && days === 5) {
         leadsToContactCount++;
         
         // Agrégation par titre pour le message

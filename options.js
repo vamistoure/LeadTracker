@@ -115,7 +115,7 @@ function getFilteredLeads() {
       if (lead.contacted) return false;
       if (!lead.acceptanceDate) return false;
       const days = getDaysDiff(lead.acceptanceDate);
-      if (days < 5 || days > 7) return false;
+      if (days !== 5) return false;
     }
 
     if (keyword) {
@@ -186,7 +186,7 @@ function renderTable() {
     const days = lead.acceptanceDate ? getDaysDiff(lead.acceptanceDate) : null;
     const tr = document.createElement('tr');
     
-    if (lead.acceptanceDate && !lead.contacted && days >= 5 && days <= 7) {
+    if (lead.acceptanceDate && !lead.contacted && days === 5) {
       tr.classList.add('highlight-contact');
     }
 
