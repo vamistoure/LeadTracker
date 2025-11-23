@@ -106,6 +106,66 @@
       </div>
     </div>
 
+    <div id="leadDetailModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <div id="detailName" class="detail-name"></div>
+            <div id="detailHeadline" class="detail-headline"></div>
+            <div id="detailCompany" class="detail-company"></div>
+          </div>
+          <button id="btnCloseDetail" class="btn ghost" type="button">Fermer</button>
+        </div>
+
+        <div class="modal-grid">
+          <label>Statut
+            <input type="text" id="detailStatus" placeholder="Statut personnalisé">
+          </label>
+          <label>Tags (séparés par des virgules)
+            <input type="text" id="detailTags" placeholder="ex: important, suivi">
+          </label>
+          <label>Type
+            <select id="detailDirection">
+              <option value="outbound_pending">En attente (demande envoyée)</option>
+              <option value="outbound_accepted">Outbound (acceptée)</option>
+              <option value="inbound_accepted">Inbound (reçue)</option>
+            </select>
+          </label>
+          <label>Titre de recherche
+            <input type="text" id="detailSearchTitle">
+          </label>
+          <label>Demande
+            <input type="date" id="detailRequestDate">
+          </label>
+          <label>Acceptation
+            <input type="date" id="detailAcceptanceDate">
+          </label>
+          <label>Contacté le
+            <input type="date" id="detailContactDate">
+          </label>
+          <label>Conversion le
+            <input type="date" id="detailConversionDate">
+          </label>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="detailContacted"> Déjà contacté
+          </label>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="detailConverted"> Converti
+          </label>
+        </div>
+
+        <label>Notes
+          <textarea id="detailNotes" rows="4" class="message-textarea"></textarea>
+        </label>
+
+        <div class="message-actions">
+          <button id="btnSaveDetail" class="btn primary" type="button">Enregistrer</button>
+          <button id="btnExportDetail" class="btn ghost" type="button">Exporter en CSV</button>
+          <div id="detailFeedback" class="feedback hidden" role="status"></div>
+        </div>
+      </div>
+    </div>
+
     <section class="card message-section hidden" id="messageSection">
       <div class="card-header">
         <div class="card-title" id="messageTitle">Message suggéré</div>

@@ -226,6 +226,7 @@ function renderTable() {
       </td>
       <td>
         <div class="actions-inline">
+          <button class="btn-icon detail-lead" data-id="${lead.id}" title="Détails">🔍</button>
           ${lead.direction === 'outbound_pending' ? 
             `<button class="btn-icon accept-lead" data-id="${lead.id}" title="Marquer comme accepté">✔️</button>` : 
             ''
@@ -251,6 +252,13 @@ function renderTable() {
       const id = el.getAttribute('data-id');
       const lead = allLeads.find(l => l.id === id);
       if (lead) showSuggestedMessage(lead);
+    });
+  });
+  document.querySelectorAll('.detail-lead').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.getAttribute('data-id');
+      const lead = allLeads.find(l => l.id === id);
+      if (lead) openLeadDetail(lead);
     });
   });
 
@@ -330,6 +338,21 @@ function setupEventListeners() {
   const btnReset = document.getElementById('btnResetFilters');
   if (btnReset) {
     btnReset.addEventListener('click', resetFilters);
+  }
+
+  const btnCloseDetail = document.getElementById('btnCloseDetail');
+  if (btnCloseDetail) {
+    btnCloseDetail.addEventListener('click', () => {
+      document.getElementById('leadDetailModal')?.classList.add('hidden');
+    });
+  }
+  const btnSaveDetail = document.getElementById('btnSaveDetail');
+  if (btnSaveDetail) {
+    btnSaveDetail.addEventListener('click', saveLeadDetail);
+  }
+  const btnExportDetail = document.getElementById('btnExportDetail');
+  if (btnExportDetail) {
+    btnExportDetail.addEventListener('click', exportLeadDetailCsv);
   }
 
   document.getElementById('btnClear').addEventListener('click', async () => {
@@ -487,6 +510,98 @@ function extractRoleFromHeadline(headline) {
   return selected || null;
 }
 
+function openLeadDetail(lead) {
+  lastSuggestedLead = lead;
+  const modal = document.getElementById('leadDetailModal');
+  const feedback = document.getElementById('detailFeedback');
+  if (!modal) return;
+  document.getElementById('detailName').textContent = lead.name || 'Inconnu';
+  document.getElementById('detailHeadline').textContent = lead.headline || '';
+  document.getElementById('detailCompany').textContent = lead.company || '';
+  document.getElementById('detailStatus').value = lead.status || '';
+  document.getElementById('detailTags').value = Array.isArray(lead.tags) ? lead.tags.join(', ') : (lead.tags || '');
+  document.getElementById('detailDirection').value = lead.direction || 'outbound_pending';
+  document.getElementById('detailSearchTitle').value = lead.searchTitle || '';
+  document.getElementById('detailRequestDate').value = lead.requestDate || '';
+  document.getElementById('detailAcceptanceDate').value = lead.acceptanceDate || '';
+  document.getElementById('detailContactDate').value = lead.contactedDate || '';
+  document.getElementById('detailConversionDate').value = lead.conversionDate || '';
+  document.getElementById('detailContacted').checked = !!lead.contacted;
+  document.getElementById('detailConverted').checked = !!lead.converted;
+  document.getElementById('detailNotes').value = lead.notes || '';
+  feedback.classList.add('hidden');
+  modal.classList.remove('hidden');
+}
+
+async function saveLeadDetail() {
+  const feedback = document.getElementById('detailFeedback');
+  try {
+    const data = await chrome.storage.local.get(['leads']);
+    let leads = data.leads || [];
+    const idx = leads.findIndex(l => l.id === lastSuggestedLead?.id);
+    if (idx === -1) return;
+    const updated = {
+      ...leads[idx],
+      status: document.getElementById('detailStatus').value.trim(),
+      tags: document.getElementById('detailTags').value.split(',').map(t => t.trim()).filter(Boolean),
+      direction: document.getElementById('detailDirection').value,
+      searchTitle: document.getElementById('detailSearchTitle').value.trim() || leads[idx].searchTitle,
+      requestDate: document.getElementById('detailRequestDate').value || null,
+      acceptanceDate: document.getElementById('detailAcceptanceDate').value || null,
+      contactedDate: document.getElementById('detailContactDate').value || null,
+      conversionDate: document.getElementById('detailConversionDate').value || null,
+      contacted: document.getElementById('detailContacted').checked,
+      converted: document.getElementById('detailConverted').checked,
+      notes: document.getElementById('detailNotes').value
+    };
+    leads[idx] = updated;
+    await chrome.storage.local.set({ leads });
+    setFeedback('Lead mis à jour.', 'success');
+    feedback.classList.remove('hidden', 'error');
+    feedback.classList.add('success');
+    feedback.textContent = 'Lead mis à jour.';
+    renderTable();
+  } catch (e) {
+    console.error('Erreur mise à jour lead detail:', e);
+    feedback.classList.remove('hidden', 'success');
+    feedback.classList.add('error');
+    feedback.textContent = 'Erreur lors de la mise à jour.';
+  }
+}
+
+function exportLeadDetailCsv() {
+  if (!lastSuggestedLead) return;
+  const lead = lastSuggestedLead;
+  const headers = ["Nom","Headline","Entreprise","URL Profil","Titre Recherche","Type","Date Demande","Date Acceptation","Contacté","Date Contact","Conversion","Date Conversion","Tags","Statut","Notes","Date Création"];
+  const row = [
+    `"${(lead.name||'').replace(/"/g,'""')}"`,
+    `"${(lead.headline||'').replace(/"/g,'""')}"`,
+    `"${(lead.company||'').replace(/"/g,'""')}"`,
+    lead.profileUrl||'',
+    `"${(formatTitle(lead.searchTitle||'').replace(/"/g,'""'))}"`,
+    lead.direction||'',
+    lead.requestDate||'',
+    lead.acceptanceDate||'',
+    lead.contacted?'Oui':'Non',
+    lead.contactedDate||'',
+    lead.converted?'Oui':'Non',
+    lead.conversionDate||'',
+    `"${Array.isArray(lead.tags)?lead.tags.join(';').replace(/"/g,'""'):(lead.tags||'').replace(/"/g,'""')}"`,
+    `"${(lead.status||'').replace(/"/g,'""')}"`,
+    `"${(lead.notes||'').replace(/"/g,'""')}"`,
+    lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : ''
+  ];
+  const csv = "\uFEFF" + [headers.join(','), row.join(',')].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `lead_${lead.id}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 function nextWorkingDaySlots() {
   const isWeekend = (d) => {
     const day = d.getDay();
