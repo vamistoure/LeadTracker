@@ -139,6 +139,7 @@ function analyzePageContextOnce() {
     // Lecture unique du texte - pas de manipulation du DOM
     let profileName = readProfileName();
     const profileHeadline = readProfileHeadline();
+    const profileCompany = readProfileCompany();
 
     // Si toujours pas de nom, essayer depuis l'URL (dernier recours)
     if (!profileName) {
@@ -169,6 +170,7 @@ function analyzePageContextOnce() {
       searchKeyword: null,
       profileName: profileName,
       profileHeadline: profileHeadline,
+      profileCompany: profileCompany,
       profileUrl: cleanUrl
     };
   }
@@ -221,6 +223,23 @@ function readProfileHeadline() {
   }
 
   debugLog("[LeadTracker][DEBUG] Headline toujours vide après sélecteurs et métas.");
+  return "";
+}
+
+function readProfileCompany() {
+  const selectors = [
+    '.pv-text-details__right-panel .text-body-small',
+    '.pv-text-details__right-panel .text-body-medium',
+    '[data-anonymize="company-name"]',
+    '.pv-entity__secondary-title'
+  ];
+
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (el && el.innerText?.trim()) {
+      return el.innerText.trim();
+    }
+  }
   return "";
 }
 

@@ -78,6 +78,7 @@ function renderExistingLead(lead) {
 
   getById('existingName').textContent = lead.name || 'Inconnu';
   getById('existingHeadline').textContent = lead.headline || '';
+  getById('existingCompany').textContent = lead.company || '–';
   getById('existingSearchTitle').textContent = lead.searchTitle || '–';
   getById('existingDirection').textContent = formatDirection(lead.direction);
   getById('existingRequestDate').textContent = formatDisplayDate(lead.requestDate);
@@ -303,6 +304,7 @@ async function initProfileView(context) {
   const profileName = context.profileName || "Inconnu";
   getById('leadName').value = profileName;
   getById('leadHeadline').value = context.profileHeadline || "";
+  getById('leadCompany').value = context.profileCompany || "";
   getById('leadUrl').value = context.profileUrl || "";
   
   if (profileName === "Inconnu" && context.profileUrl && context.profileUrl.includes("/in/")) {
@@ -576,6 +578,7 @@ function setupEventListeners() {
           name: getById('leadName').value,
           headline: getById('leadHeadline').value,
           profileUrl: profileUrl,
+          company: getById('leadCompany').value || '',
           searchTitle: searchTitle,
           direction: connectionType,
           requestDate: requestDate,

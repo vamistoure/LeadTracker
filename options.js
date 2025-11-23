@@ -204,6 +204,7 @@ function renderTable() {
     const daysText = days !== null ? `J+${days}` : '-';
 
     tr.innerHTML = `
+      <td>${lead.company || '-'}</td>
       <td>
         <div class="profile-cell">
           <a href="${lead.profileUrl}" target="_blank" class="profile-name">${lead.name || 'Inconnu'}</a>
@@ -391,7 +392,7 @@ function setupEventListeners() {
         return;
       }
 
-      const headers = ["Nom", "Headline", "URL Profil", "Titre Recherche", "Type", "Date Demande", "Date Acceptation", "Jours depuis", "Contacté", "Date Contact", "Date Création"];
+      const headers = ["Nom", "Headline", "URL Profil", "Entreprise", "Titre Recherche", "Type", "Date Demande", "Date Acceptation", "Jours depuis", "Contacté", "Date Contact", "Date Création"];
       
       const rows = filtered.map(l => {
         let statusText = '';
@@ -409,6 +410,7 @@ function setupEventListeners() {
           `"${(l.name || '').replace(/"/g, '""')}"`,
           `"${(l.headline || '').replace(/"/g, '""')}"`,
           l.profileUrl,
+          `"${(l.company || '').replace(/"/g, '""')}"`,
           `"${(formatTitle(l.searchTitle || '').replace(/"/g, '""'))}"`,
           statusText,
           l.requestDate || '',
