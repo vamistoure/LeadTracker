@@ -17,6 +17,7 @@ const PAGE_SIZE = 10;
 let currentSortColumn = 'createdAt';
 let currentSortDir = 'desc';
 const formatTitle = (label = '') => (label || '').trim().toUpperCase();
+const normalizeTitle = (label = '') => (label || '').trim().toUpperCase();
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
@@ -69,15 +70,24 @@ function renderFilters() {
 
   select.innerHTML = '<option value="all">Tous les titres</option>';
   
-  const usedTitles = new Set(allLeads.map(l => l.searchTitle));
-  allTitles.forEach(t => usedTitles.add(t.label));
-
-  Array.from(usedTitles).sort().forEach(title => {
-    const opt = document.createElement('option');
-    opt.value = title;
-    opt.textContent = formatTitle(title);
-    select.appendChild(opt);
+  const usedMap = new Map();
+  allLeads.forEach(l => {
+    const norm = normalizeTitle(l.searchTitle);
+    if (norm) usedMap.set(norm, formatTitle(norm));
   });
+  allTitles.forEach(t => {
+    const norm = normalizeTitle(t.label);
+    if (norm) usedMap.set(norm, formatTitle(norm));
+  });
+
+  Array.from(usedMap.entries())
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .forEach(([value, label]) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      select.appendChild(opt);
+    });
 }
 
 function getFilteredLeads() {
@@ -90,7 +100,7 @@ function getFilteredLeads() {
   toggleFilterBadge(onlyToContact);
 
   return allLeads.filter(lead => {
-    if (searchTitle !== 'all' && lead.searchTitle !== searchTitle) return false;
+    if (searchTitle !== 'all' && normalizeTitle(lead.searchTitle) !== searchTitle) return false;
 
     if (dateFrom && lead.acceptanceDate && lead.acceptanceDate < dateFrom) return false;
     if (dateTo && lead.acceptanceDate && lead.acceptanceDate > dateTo) return false;
