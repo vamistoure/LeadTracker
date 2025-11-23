@@ -14,6 +14,9 @@ let allTitles = [];
 let isLoading = true;
 let currentPage = 1;
 const PAGE_SIZE = 10;
+let currentSortColumn = 'createdAt';
+let currentSortDir = 'desc';
+const formatTitle = (label = '') => (label || '').trim().toUpperCase();
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
@@ -72,7 +75,7 @@ function renderFilters() {
   Array.from(usedTitles).sort().forEach(title => {
     const opt = document.createElement('option');
     opt.value = title;
-    opt.textContent = title;
+    opt.textContent = formatTitle(title);
     select.appendChild(opt);
   });
 }
@@ -192,7 +195,7 @@ function renderTable() {
         </div>
       </td>
       <td>${lead.topLead ? '★' : ''}</td>
-      <td>${lead.searchTitle}</td>
+      <td>${formatTitle(lead.searchTitle)}</td>
       <td>${statusText}</td>
       <td>${lead.requestDate || '-'}</td>
       <td>${lead.acceptanceDate || 'En attente'}</td>
@@ -374,7 +377,7 @@ function setupEventListeners() {
           `"${(l.name || '').replace(/"/g, '""')}"`,
           `"${(l.headline || '').replace(/"/g, '""')}"`,
           l.profileUrl,
-          `"${(l.searchTitle || '').replace(/"/g, '""')}"`,
+          `"${(formatTitle(l.searchTitle || '').replace(/"/g, '""'))}"`,
           statusText,
           l.requestDate || '',
           l.acceptanceDate || 'En attente',
