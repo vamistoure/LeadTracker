@@ -228,10 +228,16 @@ function readProfileHeadline() {
 
 function readProfileCompany() {
   const selectors = [
-    '.pv-text-details__right-panel .text-body-small',
+    '.pv-text-details__right-panel .pv-text-details__right-panel-item',
     '.pv-text-details__right-panel .text-body-medium',
+    '.pv-text-details__right-panel .text-body-small',
+    '.pv-text-details__company-name-text',
+    'a[href*="/company/"] span',
+    'a[href*="/company/"]',
     '[data-anonymize="company-name"]',
-    '.pv-entity__secondary-title'
+    '.pv-entity__secondary-title',
+    'section[id*="experience"] li span.t-14.t-normal',
+    'section[id*="experience"] li .inline-show-more-text'
   ];
 
   for (const selector of selectors) {
@@ -240,6 +246,23 @@ function readProfileCompany() {
       return el.innerText.trim();
     }
   }
+
+  // Fallback: essayer via meta title/description en récupérant la partie après "chez"/"at"
+  const metaOg = document.querySelector('meta[property="og:title"]')?.content || '';
+  const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+  const candidates = [metaOg, metaDesc];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const lower = raw.toLowerCase();
+    const idxChez = lower.indexOf(' chez ');
+    const idxAt = lower.indexOf(' at ');
+    const cutIdx = idxChez !== -1 ? idxChez : idxAt;
+    if (cutIdx !== -1) {
+      const company = raw.substring(cutIdx + 5).split(/[\|\-–]/)[0].trim();
+      if (company) return company;
+    }
+  }
+
   return "";
 }
 
