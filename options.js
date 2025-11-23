@@ -18,6 +18,7 @@ let currentSortColumn = 'createdAt';
 let currentSortDir = 'desc';
 const formatTitle = (label = '') => (label || '').trim().toUpperCase();
 const normalizeTitle = (label = '') => (label || '').trim().toUpperCase();
+let lastSuggestedLead = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
@@ -447,9 +448,12 @@ function setupEventListeners() {
     if (!textarea) return;
     try {
       await navigator.clipboard.writeText(textarea.value || '');
+      if (lastSuggestedLead?.profileUrl) {
+        window.open(lastSuggestedLead.profileUrl, '_blank');
+      }
       feedback.classList.remove('hidden', 'error');
       feedback.classList.add('success');
-      feedback.textContent = 'Message copié.';
+      feedback.textContent = 'Message copié. Profil ouvert pour envoyer votre message.';
     } catch (e) {
       console.error('Impossible de copier le message:', e);
       feedback.classList.remove('hidden', 'success');
@@ -549,4 +553,5 @@ function showSuggestedMessage(lead) {
   feedback.classList.add('hidden');
   section.classList.remove('hidden');
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  lastSuggestedLead = lead;
 }
