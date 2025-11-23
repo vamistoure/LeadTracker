@@ -218,14 +218,14 @@ function renderTable() {
       <td>${daysText}</td>
       <td><input type="checkbox" class="chk-contacted" data-id="${lead.id}" ${lead.contacted ? 'checked' : ''}></td>
       <td>
-        <button class="btn-icon message-lead" data-id="${lead.id}" title="Générer un message">Message</button>
-      </td>
-      <td>
-        ${lead.direction === 'outbound_pending' ? 
-          `<button class="btn-icon accept-lead" data-id="${lead.id}" title="Marquer comme accepté">Accepter</button>` : 
-          ''
-        }
-        <button class="btn-icon delete-lead" data-id="${lead.id}" title="Supprimer">Supprimer</button>
+        <div class="actions-inline">
+          <button class="btn-icon message-lead" data-id="${lead.id}" title="Message">✉️</button>
+          ${lead.direction === 'outbound_pending' ? 
+            `<button class="btn-icon accept-lead" data-id="${lead.id}" title="Marquer comme accepté">✔️</button>` : 
+            ''
+          }
+          <button class="btn-icon delete-lead" data-id="${lead.id}" title="Supprimer">🗑️</button>
+        </div>
       </td>
     `;
     tbody.appendChild(tr);

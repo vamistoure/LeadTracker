@@ -272,6 +272,11 @@ tbody tr.highlight-contact {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s ease;
+  min-width: 36px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-icon:hover {
@@ -295,6 +300,12 @@ tbody tr.highlight-contact {
 
 .btn-icon.delete-lead:hover {
   background: #fff1f2;
+}
+
+.actions-inline {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .empty-state {
