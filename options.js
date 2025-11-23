@@ -477,10 +477,47 @@ function extractRoleFromHeadline(headline) {
   return selected || null;
 }
 
+function nextWorkingDaySlots() {
+  const isWeekend = (d) => {
+    const day = d.getDay();
+    return day === 0 || day === 6;
+  };
+
+  let first = new Date();
+  first.setHours(0,0,0,0);
+  while (isWeekend(first)) {
+    first.setDate(first.getDate() + 1);
+  }
+  if (first.toDateString() === new Date().toDateString()) {
+    first.setDate(first.getDate() + 1);
+    while (isWeekend(first)) first.setDate(first.getDate() + 1);
+  }
+
+  let second = new Date(first);
+  second.setDate(first.getDate() + 1);
+  while (isWeekend(second)) {
+    second.setDate(second.getDate() + 1);
+  }
+
+  const formatSlot = (date, hour, minute) => {
+    const opts = { weekday: 'long', month: 'long', day: 'numeric' };
+    const dateStr = date.toLocaleDateString(undefined, opts);
+    const hh = hour.toString().padStart(2, '0');
+    const mm = minute.toString().padStart(2, '0');
+    return `${dateStr} à ${hh}h${mm}`;
+  };
+
+  return [
+    { label: formatSlot(first, 12, 0) },
+    { label: formatSlot(second, 15, 0) }
+  ];
+}
+
 function buildSuggestedMessage(lead) {
   const firstName = extractFirstName(lead.name) || "là";
   const role = extractRoleFromHeadline(lead.headline);
   const isInbound = lead.direction === 'inbound_accepted';
+  const slots = nextWorkingDaySlots();
 
   const lines = [];
   lines.push(`Hello ${firstName},`);
@@ -490,7 +527,9 @@ function buildSuggestedMessage(lead) {
     lines.push(`J'ai vu que tu étais ${role} et je trouve ça intéressant par rapport à ce que je fais.`);
   }
   lines.push("Serais-tu dispo à l'occasion pour papoter 15 min et voir ce qu'on peut s'apporter mutuellement ?");
-  lines.push("Je te propose mardi à 12:00 ou jeudi à 13:30, mais je peux m'adapter à tes disponibilités.");
+  if (slots && slots.length === 2) {
+    lines.push(`Je te propose ${slots[0].label} ou ${slots[1].label}, mais je peux m'adapter à tes disponibilités.`);
+  }
 
   return lines.join('\n');
 }
@@ -507,4 +546,5 @@ function showSuggestedMessage(lead) {
   textarea.value = buildSuggestedMessage(lead);
   feedback.classList.add('hidden');
   section.classList.remove('hidden');
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
