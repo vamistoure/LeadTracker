@@ -1,0 +1,11 @@
+{
+  "name": "leadtracker-extension",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "fmt": "prettier --write \"**/*.{js,css,html,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
+  }
+}

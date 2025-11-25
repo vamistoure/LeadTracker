@@ -1,180 +1,227 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <title>LeadTracker</title>
-  <link rel="stylesheet" href="popup.css">
-</head>
-<body>
-  <div id="app" class="app">
-    <header class="app-header">
-      <div class="titles">
-        <div class="app-title">LeadTracker</div>
-        <div class="app-subtitle">Suivi de leads LinkedIn</div>
-      </div>
-      <button id="btnOpenDashboard" class="btn ghost">Ouvrir le dashboard</button>
-    </header>
-
-    <div id="popupFeedback" class="feedback global hidden" role="status"></div>
-
-    <div id="loading" class="view">
-      <div class="panel center">
-        <div class="spinner"></div>
-        <div class="panel-title">Chargement...</div>
-        <p class="muted">Lecture des informations de la page LinkedIn</p>
-      </div>
-    </div>
-
-    <div id="view-search" class="view hidden">
-      <div class="panel">
-        <div class="panel-title">Enregistrer un titre de recherche</div>
-        <p class="muted small">Depuis une page de résultats LinkedIn.</p>
-        <div class="form-group">
-          <label for="searchTitleInput">Titre de recherche *</label>
-          <input type="text" id="searchTitleInput" placeholder="Ex: Head of Data Paris">
+  <head>
+    <meta charset="UTF-8" />
+    <title>LeadTracker</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <header class="app-header">
+        <div class="titles">
+          <div class="app-title">LeadTracker</div>
+          <div class="app-subtitle">Suivi de leads LinkedIn</div>
         </div>
-        <div class="actions">
-          <button id="btnSaveSearch" class="btn primary">
-            <span id="btnSaveSearchText">Enregistrer</span>
-            <span id="btnSaveSearchLoader" class="spinner inline hidden"></span>
-          </button>
+        <div class="header-actions">
+          <div id="contextBadge" class="context-badge hidden"></div>
+          <button id="btnOpenDashboard" class="btn ghost">Ouvrir le dashboard</button>
         </div>
-        <div id="searchFeedback" class="feedback hidden" role="alert"></div>
+      </header>
+
+      <div id="popupFeedback" class="feedback global hidden" role="status"></div>
+
+      <div id="loading" class="view">
+        <div class="panel center">
+          <div class="spinner"></div>
+          <div class="panel-title">Chargement...</div>
+          <p class="muted">Lecture des informations de la page LinkedIn</p>
+        </div>
       </div>
 
-      <div class="panel info">
-        <div class="panel-title">Conseil</div>
-        <p class="muted small">Enregistrez un titre par type de recherche pour retrouver vos leads plus vite.</p>
+      <div id="view-search" class="view hidden">
+        <div class="panel">
+          <div class="panel-title">Enregistrer un titre de recherche</div>
+          <p class="muted small">Depuis une page de résultats LinkedIn.</p>
+          <div class="form-group">
+            <label for="searchTitleInput">Titre de recherche *</label>
+            <input type="text" id="searchTitleInput" placeholder="Ex: Head of Data Paris" />
+          </div>
+          <div class="actions">
+            <button id="btnSaveSearch" class="btn primary">
+              <span id="btnSaveSearchText">Enregistrer</span>
+              <span id="btnSaveSearchLoader" class="spinner inline hidden"></span>
+            </button>
+          </div>
+          <div id="searchFeedback" class="feedback hidden" role="alert"></div>
+        </div>
+
+        <div class="panel info">
+          <div class="panel-title">Conseil</div>
+          <p class="muted small">
+            Enregistrez un titre par type de recherche pour retrouver vos leads plus vite.
+          </p>
+        </div>
       </div>
-    </div>
 
-    <div id="view-profile" class="view hidden">
-      <div class="panel">
-        <div class="panel-title">Enregistrer un lead</div>
-        <p class="muted small">Depuis un profil LinkedIn ou juste après un clic sur "Connect".</p>
+      <div id="view-profile" class="view hidden">
+        <div class="panel">
+          <div class="panel-title">Enregistrer un lead</div>
+          <p class="muted small">Depuis un profil LinkedIn ou juste après un clic sur "Connect".</p>
 
-        <div class="form-group">
-          <label for="leadName">Nom</label>
-          <input type="text" id="leadName" readonly class="readonly">
+          <div class="form-group">
+            <label for="leadName">Nom</label>
+            <input type="text" id="leadName" readonly class="readonly" />
+          </div>
+
+          <div class="form-group">
+            <label for="leadHeadline">Headline</label>
+            <input type="text" id="leadHeadline" readonly class="readonly" />
+          </div>
+
+          <div class="form-group">
+            <label>Entreprise actuelle</label>
+            <input type="text" id="leadCompany" readonly class="readonly" />
+          </div>
+
+          <div class="form-group">
+            <label for="leadUrl">URL du profil</label>
+            <input type="text" id="leadUrl" readonly class="readonly small-text" />
+          </div>
+
+          <div class="form-group">
+            <label for="searchTitleSelect">Titre de recherche *</label>
+            <select id="searchTitleSelect"></select>
+            <input
+              type="text"
+              id="customTitleInput"
+              class="hidden mt-6"
+              placeholder="Nouveau titre de recherche"
+            />
+            <div id="emptyTitlesHint" class="hint hidden">
+              Vous n'avez pas encore de titres. Utilisez "Autre (nouveau titre)" ou enregistrez un
+              titre depuis une recherche.
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Type de connexion *</label>
+            <div class="radio-group">
+              <label
+                ><input type="radio" name="connectionType" value="outbound_pending" checked />
+                Demande envoyée (en attente)</label
+              >
+              <label
+                ><input type="radio" name="connectionType" value="outbound_accepted" /> Demande
+                acceptée (outbound)</label
+              >
+              <label
+                ><input type="radio" name="connectionType" value="inbound_accepted" /> Demande reçue
+                (inbound)</label
+              >
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group half">
+              <label for="requestDate">Date de demande</label>
+              <input type="date" id="requestDate" />
+            </div>
+            <div class="form-group half">
+              <label for="acceptanceDate"
+                >Date d'acceptation
+                <span id="acceptanceDateRequired" class="required">*</span></label
+              >
+              <input type="date" id="acceptanceDate" />
+            </div>
+          </div>
+
+          <div class="form-group checkbox">
+            <label>
+              <input type="checkbox" id="isContacted" />
+              Déjà contacté
+            </label>
+          </div>
+
+          <div class="form-group checkbox modern-toggle">
+            <label>
+              <input type="checkbox" id="isTopLead" />
+              Marquer comme Top Lead
+            </label>
+            <div class="hint">Pour vos priorités, ils seront signalés dans le dashboard.</div>
+          </div>
+
+          <div class="actions">
+            <button id="btnSaveLead" class="btn primary">
+              <span id="btnSaveLeadText">Enregistrer le lead</span>
+              <span id="btnSaveLeadLoader" class="spinner inline hidden"></span>
+            </button>
+            <button id="btnCancel" class="btn ghost">Annuler</button>
+          </div>
+          <div id="leadFeedback" class="feedback hidden" role="alert"></div>
         </div>
 
-        <div class="form-group">
-          <label for="leadHeadline">Headline</label>
-          <input type="text" id="leadHeadline" readonly class="readonly">
+        <div class="panel info">
+          <div class="panel-title">Rappel</div>
+          <ul class="list">
+            <li>Depuis une recherche, cliquez sur "Connect" : le lead est pré-rempli.</li>
+            <li>Complétez le titre de recherche et les dates puis enregistrez.</li>
+          </ul>
         </div>
+      </div>
 
-        <div class="form-group">
-          <label>Entreprise actuelle</label>
-          <input type="text" id="leadCompany" readonly class="readonly">
-        </div>
+      <!-- Vue Lead existant -->
+      <div id="view-existing" class="view hidden">
+        <div class="panel existing-card">
+          <div class="existing-header">
+            <div>
+              <div id="existingName" class="existing-name"></div>
+              <div id="existingHeadline" class="existing-headline"></div>
+            </div>
+            <span id="existingStatus" class="status-badge"></span>
+          </div>
 
-        <div class="form-group">
-          <label for="leadUrl">URL du profil</label>
-          <input type="text" id="leadUrl" readonly class="readonly small-text">
-        </div>
+          <div class="existing-meta-grid">
+            <div class="meta-card">
+              <div class="meta-label">Titre de recherche</div>
+              <div id="existingSearchTitle" class="meta-value"></div>
+            </div>
+            <div class="meta-card">
+              <div class="meta-label">Entreprise</div>
+              <div id="existingCompany" class="meta-value"></div>
+            </div>
+            <div class="meta-card">
+              <div class="meta-label">Type</div>
+              <div id="existingDirection" class="meta-value"></div>
+            </div>
+            <div class="meta-card">
+              <div class="meta-label">Demande</div>
+              <div id="existingRequestDate" class="meta-value"></div>
+            </div>
+            <div class="meta-card">
+              <div class="meta-label">Acceptation</div>
+              <div id="existingAcceptanceDate" class="meta-value"></div>
+            </div>
+            <div class="meta-card">
+              <div class="meta-label">Contact</div>
+              <div id="existingContactDate" class="meta-value"></div>
+            </div>
+          </div>
 
-        <div class="form-group">
-          <label for="searchTitleSelect">Titre de recherche *</label>
-          <select id="searchTitleSelect"></select>
-          <input type="text" id="customTitleInput" class="hidden mt-6" placeholder="Nouveau titre de recherche">
-          <div id="emptyTitlesHint" class="hint hidden">Vous n'avez pas encore de titres. Utilisez "Autre (nouveau titre)" ou enregistrez un titre depuis une recherche.</div>
-        </div>
+          <div id="existingMessage" class="existing-message"></div>
 
-        <div class="form-group">
-          <label>Type de connexion *</label>
-          <div class="radio-group">
-            <label><input type="radio" name="connectionType" value="outbound_pending" checked> Demande envoyée (en attente)</label>
-            <label><input type="radio" name="connectionType" value="outbound_accepted"> Demande acceptée (outbound)</label>
-            <label><input type="radio" name="connectionType" value="inbound_accepted"> Demande reçue (inbound)</label>
+          <div class="actions stacked">
+            <button id="btnExistingPrimary" class="btn primary full"></button>
+            <button id="btnExistingSecondary" class="btn ghost full hidden"></button>
+            <button id="btnExistingDashboard" class="btn ghost full subtle-link">
+              Voir dans le dashboard
+            </button>
           </div>
         </div>
-
-        <div class="form-row">
-          <div class="form-group half">
-            <label for="requestDate">Date de demande</label>
-            <input type="date" id="requestDate">
-          </div>
-          <div class="form-group half">
-            <label for="acceptanceDate">Date d'acceptation <span id="acceptanceDateRequired" class="required">*</span></label>
-            <input type="date" id="acceptanceDate">
-          </div>
-        </div>
-
-        <div class="form-group checkbox">
-          <label>
-            <input type="checkbox" id="isContacted">
-            Déjà contacté
-          </label>
-        </div>
-
-        <div class="form-group checkbox modern-toggle">
-          <label>
-            <input type="checkbox" id="isTopLead">
-            Marquer comme Top Lead
-          </label>
-          <div class="hint">Pour vos priorités, ils seront signalés dans le dashboard.</div>
-        </div>
-
-        <div class="actions">
-          <button id="btnSaveLead" class="btn primary">
-            <span id="btnSaveLeadText">Enregistrer le lead</span>
-            <span id="btnSaveLeadLoader" class="spinner inline hidden"></span>
-          </button>
-          <button id="btnCancel" class="btn ghost">Annuler</button>
-        </div>
-        <div id="leadFeedback" class="feedback hidden" role="alert"></div>
       </div>
 
-      <div class="panel info">
-        <div class="panel-title">Rappel</div>
-        <ul class="list">
-          <li>Depuis une recherche, cliquez sur "Connect" : le lead est pré-rempli.</li>
-          <li>Complétez le titre de recherche et les dates puis enregistrez.</li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- Vue Lead existant -->
-    <div id="view-existing" class="view hidden">
-      <div class="panel existing-card">
-        <div class="existing-header">
-          <div>
-            <div id="existingName" class="existing-name"></div>
-            <div id="existingHeadline" class="existing-headline"></div>
+      <div id="view-other" class="view hidden">
+        <div class="panel center">
+          <div class="panel-title">Page non prise en charge</div>
+          <p class="muted">Ouvrez une recherche LinkedIn ou un profil pour utiliser LeadTracker.</p>
+          <div class="actions single">
+            <button id="btnOpenDashboardAlt" class="btn ghost full">Ouvrir le dashboard</button>
           </div>
-          <span id="existingStatus" class="status-badge"></span>
-        </div>
-
-        <div class="existing-meta">
-          <div><span class="meta-label">Titre de recherche :</span> <span id="existingSearchTitle"></span></div>
-          <div><span class="meta-label">Entreprise :</span> <span id="existingCompany"></span></div>
-          <div><span class="meta-label">Type :</span> <span id="existingDirection"></span></div>
-          <div><span class="meta-label">Demande :</span> <span id="existingRequestDate"></span></div>
-          <div><span class="meta-label">Acceptation :</span> <span id="existingAcceptanceDate"></span></div>
-          <div><span class="meta-label">Contact :</span> <span id="existingContactDate"></span></div>
-        </div>
-
-        <div id="existingMessage" class="existing-message"></div>
-
-        <div class="actions stacked">
-          <button id="btnExistingPrimary" class="btn primary full"></button>
-          <button id="btnExistingSecondary" class="btn ghost full hidden"></button>
-          <button id="btnExistingDashboard" class="btn ghost full subtle-link">Voir dans le dashboard</button>
         </div>
       </div>
     </div>
 
-    <div id="view-other" class="view hidden">
-      <div class="panel center">
-        <div class="panel-title">Page non prise en charge</div>
-        <p class="muted">Ouvrez une recherche LinkedIn ou un profil pour utiliser LeadTracker.</p>
-        <div class="actions single">
-          <button id="btnOpenDashboardAlt" class="btn ghost full">Ouvrir le dashboard</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="popup.js"></script>
-</body>
+    <script src="constants.js"></script>
+    <script src="utils.js"></script>
+    <script src="popup.js"></script>
+  </body>
 </html>

@@ -1,184 +1,252 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <title>LeadTracker - Dashboard</title>
-  <link rel="stylesheet" href="options.css">
-</head>
-<body>
-  <div class="page">
-    <header class="topbar">
-      <div>
-        <div class="app-title">LeadTracker</div>
-        <div class="app-subtitle">Dashboard de suivi des leads LinkedIn</div>
-      </div>
-      <div class="top-actions">
-        <button id="btnExport" class="btn primary">Exporter CSV</button>
-        <button id="btnExportJson" class="btn primary ghost">Exporter JSON (backup)</button>
-        <button id="btnClear" class="btn danger">Tout supprimer</button>
-      </div>
-    </header>
-
-    <div id="optionsFeedback" class="feedback hidden" role="status"></div>
-
-    <section class="card">
-      <div class="card-header">
-        <div class="card-title">Filtres</div>
-        <div id="filterBadge" class="badge hidden">Filtre "À contacter maintenant" actif</div>
-      </div>
-      <div class="filters">
-        <div class="filter">
-          <label for="filterSearchTitle">Titre de recherche</label>
-          <select id="filterSearchTitle">
-            <option value="all">Tous les titres</option>
-          </select>
+  <head>
+    <meta charset="UTF-8" />
+    <title>LeadTracker - Dashboard</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <div>
+          <div class="app-title">LeadTracker <sup class="reg-symbol">®</sup></div>
+          <div class="app-subtitle">Dashboard de suivi des leads LinkedIn</div>
         </div>
-        <div class="filter">
-          <label for="filterDateFrom">Acceptation - du</label>
-          <input type="date" id="filterDateFrom">
+        <div class="top-actions">
+          <button id="btnMetrics" class="btn ghost">Metrics</button>
+          <button id="btnExport" class="btn primary">Exporter CSV</button>
+          <button id="btnExportJson" class="btn primary ghost">Exporter JSON (backup)</button>
         </div>
-        <div class="filter">
-          <label for="filterDateTo">Acceptation - au</label>
-          <input type="date" id="filterDateTo">
+      </header>
+
+      <div id="optionsFeedback" class="feedback hidden" role="status"></div>
+
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">Filtres</div>
+          <div id="filterBadge" class="badge hidden">Filtre "À contacter maintenant" actif</div>
         </div>
-        <div class="filter">
-          <label for="filterKeyword">Recherche (mot-clé)</label>
-          <input type="text" id="filterKeyword" placeholder="Nom, headline ou titre">
-        </div>
-        <div class="filter toggle">
-          <label class="checkbox-label">
-            <input type="checkbox" id="filterToContact">
-            Afficher uniquement les leads à contacter maintenant (J+5)
-          </label>
-        </div>
-        <div class="filter">
-          <label>&nbsp;</label>
-          <button id="btnResetFilters" class="btn ghost" type="button">Réinitialiser les filtres</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-header">
-        <div class="card-title">Leads</div>
-        <div class="card-subtitle muted">Mettez à jour les statuts ou exportez vos données.</div>
-      </div>
-
-      <div id="loadingState" class="empty-state">
-        <div class="spinner"></div>
-        <div>Chargement des données...</div>
-      </div>
-
-      <div id="emptyAll" class="empty-state hidden">
-        <div class="empty-title">Vous n'avez encore aucun lead enregistré.</div>
-        <div class="empty-text">Ajoutez des leads depuis un profil LinkedIn via le popup de l'extension.</div>
-      </div>
-
-      <div id="emptyFiltered" class="empty-state hidden">
-        <div class="empty-title">Aucun lead ne correspond aux filtres actuels.</div>
-        <div class="empty-text">Modifiez ou désactivez certains filtres pour élargir les résultats.</div>
-      </div>
-
-      <div id="tableWrapper" class="table-wrapper hidden">
-        <table id="leadsTable">
-          <thead>
-            <tr>
-              <th>Nom</th>
-              <th>Top</th>
-              <th>Entreprise</th>
-              <th>Titre de recherche</th>
-              <th>Type</th>
-              <th>Demande</th>
-              <th>Acceptation</th>
-              <th>Jours depuis</th>
-              <th>Contacté</th>
-              <th>Message</th>
-              <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-        </tbody>
-      </table>
-      <div id="pagination" class="pagination hidden">
-        <button id="prevPage" class="btn ghost" type="button">Précédent</button>
-        <span id="pageInfo" class="page-info"></span>
-        <button id="nextPage" class="btn ghost" type="button">Suivant</button>
-      </div>
-    </div>
-
-    <div id="leadDetailModal" class="modal hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div>
-            <div id="detailName" class="detail-name"></div>
-            <div id="detailHeadline" class="detail-headline"></div>
-            <div id="detailCompany" class="detail-company"></div>
-          </div>
-          <button id="btnCloseDetail" class="btn ghost" type="button">Fermer</button>
-        </div>
-
-        <div class="modal-grid">
-          <label>Statut
-            <input type="text" id="detailStatus" placeholder="Statut personnalisé">
-          </label>
-          <label>Tags (séparés par des virgules)
-            <input type="text" id="detailTags" placeholder="ex: important, suivi">
-          </label>
-          <label>Type
-            <select id="detailDirection">
-              <option value="outbound_pending">En attente (demande envoyée)</option>
-              <option value="outbound_accepted">Outbound (acceptée)</option>
-              <option value="inbound_accepted">Inbound (reçue)</option>
+        <div class="filters">
+          <div class="filter">
+            <label for="filterSearchTitle">Titre de recherche</label>
+            <select id="filterSearchTitle">
+              <option value="all">Tous les titres</option>
             </select>
-          </label>
-          <label>Titre de recherche
-            <input type="text" id="detailSearchTitle">
-          </label>
-          <label>Demande
-            <input type="date" id="detailRequestDate">
-          </label>
-          <label>Acceptation
-            <input type="date" id="detailAcceptanceDate">
-          </label>
-          <label>Contacté le
-            <input type="date" id="detailContactDate">
-          </label>
-          <label>Conversion le
-            <input type="date" id="detailConversionDate">
-          </label>
-          <label class="checkbox-inline">
-            <input type="checkbox" id="detailContacted"> Déjà contacté
-          </label>
-          <label class="checkbox-inline">
-            <input type="checkbox" id="detailConverted"> Converti
-          </label>
+          </div>
+          <div class="filter">
+            <label for="filterDateFrom">Acceptation - du</label>
+            <input type="date" id="filterDateFrom" />
+          </div>
+          <div class="filter">
+            <label for="filterDateTo">Acceptation - au</label>
+            <input type="date" id="filterDateTo" />
+          </div>
+          <div class="filter">
+            <label for="filterKeyword">Recherche (mot-clé)</label>
+            <input type="text" id="filterKeyword" placeholder="Nom, headline ou titre" />
+          </div>
+          <div class="filter toggle">
+            <label class="checkbox-label">
+              <input type="checkbox" id="filterToContact" />
+              Afficher uniquement les leads à contacter maintenant (J+5)
+            </label>
+          </div>
+          <div class="filter">
+            <label>&nbsp;</label>
+            <button
+              id="btnResetFilters"
+              class="btn ghost icon-only reset-filters"
+              type="button"
+              title="Réinitialiser les filtres"
+              aria-label="Réinitialiser les filtres"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path
+                  d="M3 12a9 9 0 1 1 9 9"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  fill="none"
+                />
+                <path
+                  d="M3 3v6h6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  fill="none"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Leads</div>
+            <div class="card-subtitle muted">
+              Mettez à jour les statuts ou exportez vos données.
+            </div>
+          </div>
+          <div class="card-actions">
+            <div class="column-toggle">
+              <button
+                id="btnColumns"
+                class="btn ghost icon-only"
+                type="button"
+                title="Afficher / masquer les colonnes"
+                aria-label="Afficher ou masquer les colonnes"
+              >
+                ☰
+              </button>
+              <div id="columnDropdown" class="column-dropdown hidden">
+                <div class="dropdown-title">Colonnes visibles</div>
+                <div class="dropdown-actions">
+                  <button id="btnShowAllCols" class="btn ghost small" type="button">
+                    Tout cocher
+                  </button>
+                  <button id="btnHideAllCols" class="btn ghost small" type="button">
+                    Tout décocher
+                  </button>
+                </div>
+                <div id="columnCheckboxes" class="dropdown-list"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <label>Notes
-          <textarea id="detailNotes" rows="4" class="message-textarea"></textarea>
-        </label>
-
-        <div class="message-actions">
-          <button id="btnSaveDetail" class="btn primary" type="button">Enregistrer</button>
-          <button id="btnExportDetail" class="btn ghost" type="button">Exporter en CSV</button>
-          <div id="detailFeedback" class="feedback hidden" role="status"></div>
+        <div id="loadingState" class="empty-state">
+          <div class="spinner"></div>
+          <div>Chargement des données...</div>
         </div>
-      </div>
+
+        <div id="emptyAll" class="empty-state hidden">
+          <div class="empty-title">Vous n'avez encore aucun lead enregistré.</div>
+          <div class="empty-text">
+            Ajoutez des leads depuis un profil LinkedIn via le popup de l'extension.
+          </div>
+        </div>
+
+        <div id="emptyFiltered" class="empty-state hidden">
+          <div class="empty-title">Aucun lead ne correspond aux filtres actuels.</div>
+          <div class="empty-text">
+            Modifiez ou désactivez certains filtres pour élargir les résultats.
+          </div>
+        </div>
+
+        <div id="tableWrapper" class="table-wrapper hidden">
+          <table id="leadsTable">
+            <thead>
+              <tr>
+                <th data-col="name">Nom</th>
+                <th data-col="topLead">Top</th>
+                <th data-col="company">Entreprise</th>
+                <th data-col="searchTitle">Titre de recherche</th>
+                <th data-col="direction">Type</th>
+                <th data-col="requestDate">Demande</th>
+                <th data-col="acceptanceDate">Acceptation</th>
+                <th data-col="days">Jours depuis</th>
+                <th data-col="contacted">Contacté</th>
+                <th data-col="message">Message</th>
+                <th data-col="actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div id="pagination" class="pagination hidden">
+            <button id="prevPage" class="btn ghost" type="button">Précédent</button>
+            <span id="pageInfo" class="page-info"></span>
+            <button id="nextPage" class="btn ghost" type="button">Suivant</button>
+          </div>
+        </div>
+
+        <div id="leadDetailModal" class="modal hidden">
+          <div class="modal-content">
+            <div class="modal-header">
+              <div>
+                <div id="detailName" class="detail-name"></div>
+                <div id="detailHeadline" class="detail-headline"></div>
+                <div id="detailCompany" class="detail-company"></div>
+              </div>
+              <button id="btnCloseDetail" class="btn ghost" type="button">Fermer</button>
+            </div>
+
+            <div class="modal-grid">
+              <label
+                >Statut
+                <input type="text" id="detailStatus" placeholder="Statut personnalisé" />
+              </label>
+              <label
+                >Tags (séparés par des virgules)
+                <input type="text" id="detailTags" placeholder="ex: important, suivi" />
+              </label>
+              <label
+                >Type
+                <select id="detailDirection">
+                  <option value="outbound_pending">En attente (demande envoyée)</option>
+                  <option value="outbound_accepted">Outbound (acceptée)</option>
+                  <option value="inbound_accepted">Inbound (reçue)</option>
+                </select>
+              </label>
+              <label
+                >Titre de recherche
+                <input type="text" id="detailSearchTitle" />
+              </label>
+              <label
+                >Demande
+                <input type="date" id="detailRequestDate" />
+              </label>
+              <label
+                >Acceptation
+                <input type="date" id="detailAcceptanceDate" />
+              </label>
+              <label
+                >Contacté le
+                <input type="date" id="detailContactDate" />
+              </label>
+              <label
+                >Conversion le
+                <input type="date" id="detailConversionDate" />
+              </label>
+              <label class="checkbox-inline">
+                <input type="checkbox" id="detailContacted" /> Déjà contacté
+              </label>
+              <label class="checkbox-inline">
+                <input type="checkbox" id="detailConverted" /> Converti
+              </label>
+            </div>
+
+            <label
+              >Notes
+              <textarea id="detailNotes" rows="4" class="message-textarea"></textarea>
+            </label>
+
+            <div class="message-actions">
+              <button id="btnSaveDetail" class="btn primary" type="button">Enregistrer</button>
+              <button id="btnExportDetail" class="btn ghost" type="button">Exporter en CSV</button>
+              <div id="detailFeedback" class="feedback hidden" role="status"></div>
+            </div>
+          </div>
+        </div>
+
+        <section class="card message-section hidden" id="messageSection">
+          <div class="card-header">
+            <div class="card-title" id="messageTitle">Message suggéré</div>
+          </div>
+          <textarea id="suggested-message" rows="6" class="message-textarea"></textarea>
+          <div class="message-actions">
+            <button id="btnCopyMessage" class="btn primary" type="button">Copier le message</button>
+            <div id="messageFeedback" class="feedback hidden" role="status"></div>
+          </div>
+        </section>
+      </section>
     </div>
 
-    <section class="card message-section hidden" id="messageSection">
-      <div class="card-header">
-        <div class="card-title" id="messageTitle">Message suggéré</div>
-      </div>
-      <textarea id="suggested-message" rows="6" class="message-textarea"></textarea>
-      <div class="message-actions">
-        <button id="btnCopyMessage" class="btn primary" type="button">Copier le message</button>
-        <div id="messageFeedback" class="feedback hidden" role="status"></div>
-      </div>
-    </section>
-    </section>
-  </div>
-
-  <script src="options.js"></script>
-</body>
+    <script src="constants.js"></script>
+    <script src="utils.js"></script>
+    <script src="options.js"></script>
+  </body>
 </html>

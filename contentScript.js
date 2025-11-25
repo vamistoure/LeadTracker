@@ -12,21 +12,25 @@ const MIN_CALL_INTERVAL_MS = 500; // Minimum 500ms entre deux appels
 const MAX_HEADLINE_RETRIES = 3;
 const HEADLINE_RETRY_DELAY_MS = 250;
 const DEBUG_HEADLINE = false; // Passe à true pour tracer les sélecteurs/headlines lors du debug
+const AUTO_CAPTURE_DELAY_MS = 800;
+let lastAutoCapturePath = null;
+let autoCaptureInFlight = false;
+let lastNetworkScanPath = null;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === "GET_PAGE_CONTEXT") {
+  if (request.type === 'GET_PAGE_CONTEXT') {
     // Rate limiting: vérifier qu'on ne fait pas trop d'appels
     const now = Date.now();
     if (now - lastCallTime < MIN_CALL_INTERVAL_MS) {
-      console.warn("[LeadTracker] Appel trop rapide, rate limiting activé");
-      sendResponse({ contextType: "other", error: "rate_limited" });
+      console.warn('[LeadTracker] Appel trop rapide, rate limiting activé');
+      sendResponse({ contextType: 'other', error: 'rate_limited' });
       return false;
     }
     try {
       handleGetPageContext(sendResponse);
     } catch (error) {
-      console.error("[LeadTracker] Erreur analyse contexte:", error);
-      sendResponse({ contextType: "other", error: error.message });
+      console.error('[LeadTracker] Erreur analyse contexte:', error);
+      sendResponse({ contextType: 'other', error: error.message });
     }
     return true;
   }
@@ -34,31 +38,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeTitle(label = '') {
+  return label.trim().toUpperCase();
 }
 
 async function handleGetPageContext(sendResponse) {
   try {
     let context = analyzePageContextOnce();
-    if (context.contextType === "profile" && !context.profileHeadline) {
+    if (context.contextType === 'profile' && !context.profileHeadline) {
       for (let attempt = 0; attempt < MAX_HEADLINE_RETRIES; attempt++) {
         await sleep(HEADLINE_RETRY_DELAY_MS);
         context = analyzePageContextOnce();
         if (context.profileHeadline) break;
       }
     }
-    console.log("[LeadTracker] Contexte détecté:", context);
+    console.log('[LeadTracker] Contexte détecté:', context);
     lastCallTime = Date.now();
     sendResponse(context);
   } catch (error) {
-    console.error("[LeadTracker] Erreur analyse contexte:", error);
-    sendResponse({ contextType: "other", error: error.message });
+    console.error('[LeadTracker] Erreur analyse contexte:', error);
+    sendResponse({ contextType: 'other', error: error.message });
   }
 }
 
 /**
  * Analyse l'URL et le DOM pour déterminer le contexte
- * 
+ *
  * SÉCURITÉ ANTI-BANNISSEMENT:
  * - Lecture unique du DOM (pas de boucle)
  * - Pas de navigation automatique
@@ -70,14 +78,17 @@ function analyzePageContextOnce() {
   const url = window.location.href;
 
   // --- CONTEXTE : RECHERCHE (résultats ou rubrique People d'entreprise) ---
-  if (url.includes("/search/results/people/") || (url.includes("/company/") && url.includes("/people"))) {
-    let keyword = "";
-    
-    if (url.includes("/search/results/people/")) {
+  if (
+    url.includes('/search/results/people/') ||
+    (url.includes('/company/') && url.includes('/people'))
+  ) {
+    let keyword = '';
+
+    if (url.includes('/search/results/people/')) {
       // Tentative 1: URL param
       try {
         const urlObj = new URL(url);
-        keyword = urlObj.searchParams.get("keywords");
+        keyword = urlObj.searchParams.get('keywords');
       } catch (e) {}
 
       // Tentative 2: Input du DOM (Sélecteur générique LinkedIn, peut varier)
@@ -122,8 +133,8 @@ function analyzePageContextOnce() {
     if (keyword) keyword = decodeURIComponent(keyword).trim();
 
     return {
-      contextType: "search",
-      searchKeyword: keyword || "",
+      contextType: 'search',
+      searchKeyword: keyword || '',
       profileName: null,
       profileHeadline: null,
       profileUrl: null
@@ -131,11 +142,11 @@ function analyzePageContextOnce() {
   }
 
   // --- CONTEXTE : PROFIL ---
-  if (url.includes("/in/")) {
+  if (url.includes('/in/')) {
     // IMPORTANT: Lecture unique du DOM - pas de scraping intensif
     // On lit uniquement les éléments déjà chargés sur la page actuelle
     // Sélecteurs "Best effort" pour LinkedIn (la structure change souvent)
-    
+
     // Lecture unique du texte - pas de manipulation du DOM
     let profileName = readProfileName();
     const profileHeadline = readProfileHeadline();
@@ -151,7 +162,7 @@ function analyzePageContextOnce() {
           // Décoder l'URL et formater (ex: "john-doe" -> "John Doe")
           profileName = decodeURIComponent(profileSlug)
             .split('-')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
         }
       } catch (e) {}
@@ -166,7 +177,7 @@ function analyzePageContextOnce() {
     } catch (e) {}
 
     return {
-      contextType: "profile",
+      contextType: 'profile',
       searchKeyword: null,
       profileName: profileName,
       profileHeadline: profileHeadline,
@@ -176,7 +187,7 @@ function analyzePageContextOnce() {
   }
 
   // --- CONTEXTE : AUTRE ---
-  return { contextType: "other" };
+  return { contextType: 'other' };
 }
 
 function debugLog(...args) {
@@ -209,7 +220,8 @@ function readProfileHeadline() {
 
   for (const selector of selectors) {
     const el = document.querySelector(selector);
-    if (DEBUG_HEADLINE) debugLog("[LeadTracker][DEBUG] Headline selector:", selector, el ? el.innerText : 'null');
+    if (DEBUG_HEADLINE)
+      debugLog('[LeadTracker][DEBUG] Headline selector:', selector, el ? el.innerText : 'null');
     if (el && el.innerText?.trim()) {
       return el.innerText.trim();
     }
@@ -218,12 +230,12 @@ function readProfileHeadline() {
   // Fallback métadonnées
   const metaHeadline = readHeadlineFromMeta();
   if (metaHeadline) {
-    debugLog("[LeadTracker][DEBUG] Headline from meta:", metaHeadline);
+    debugLog('[LeadTracker][DEBUG] Headline from meta:', metaHeadline);
     return metaHeadline;
   }
 
-  debugLog("[LeadTracker][DEBUG] Headline toujours vide après sélecteurs et métas.");
-  return "";
+  debugLog('[LeadTracker][DEBUG] Headline toujours vide après sélecteurs et métas.');
+  return '';
 }
 
 function readProfileCompany() {
@@ -258,12 +270,15 @@ function readProfileCompany() {
     const idxAt = lower.indexOf(' at ');
     const cutIdx = idxChez !== -1 ? idxChez : idxAt;
     if (cutIdx !== -1) {
-      const company = raw.substring(cutIdx + 5).split(/[\|\-–]/)[0].trim();
+      const company = raw
+        .substring(cutIdx + 5)
+        .split(/[\|\-–]/)[0]
+        .trim();
       if (company) return company;
     }
   }
 
-  return "";
+  return '';
 }
 
 function readHeadlineFromMeta() {
@@ -275,11 +290,14 @@ function readHeadlineFromMeta() {
     const candidate = (raw || '').trim();
     if (!candidate) continue;
     // LinkedIn sépare souvent par " | " ou " – "
-    const parts = candidate.split(/[\|\u2013-]/).map(p => p.trim()).filter(Boolean);
+    const parts = candidate
+      .split(/[\|\u2013-]/)
+      .map((p) => p.trim())
+      .filter(Boolean);
     const best = parts.length ? parts[0] : candidate;
     if (best) return best;
   }
-  return "";
+  return '';
 }
 
 function readProfileName() {
@@ -295,7 +313,8 @@ function readProfileName() {
 
   for (const selector of selectors) {
     const el = document.querySelector(selector);
-    if (DEBUG_HEADLINE) debugLog("[LeadTracker][DEBUG] Name selector:", selector, el ? el.innerText : 'null');
+    if (DEBUG_HEADLINE)
+      debugLog('[LeadTracker][DEBUG] Name selector:', selector, el ? el.innerText : 'null');
     if (el && el.innerText?.trim()) {
       return el.innerText.trim();
     }
@@ -309,7 +328,7 @@ function readProfileName() {
     if (profileSlug) {
       const nameFromUrl = decodeURIComponent(profileSlug)
         .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
       return nameFromUrl;
     }
@@ -336,7 +355,150 @@ function readProfileHeadline() {
       return el.innerText.trim();
     }
   }
-  return "";
+  return '';
+}
+
+function sendNotification(title, message) {
+  try {
+    chrome.runtime.sendMessage({
+      type: 'SHOW_NOTIFICATION',
+      title: title || 'LeadTracker',
+      message: message || ''
+    });
+  } catch (e) {
+    console.warn('[LeadTracker] Notification non envoyée:', e);
+  }
+}
+
+async function autoCaptureProfileIfMatch() {
+  if (autoCaptureInFlight) return;
+  autoCaptureInFlight = true;
+  try {
+    const context = analyzePageContextOnce();
+    if (context.contextType !== 'profile') return;
+
+    const { profileName, profileHeadline, profileUrl, profileCompany } = context;
+    if (!profileUrl) return;
+
+    const storage = await chrome.storage.local.get(['searchTitles', 'leads']);
+    const titles = storage.searchTitles || [];
+    const leads = storage.leads || [];
+    if (!titles.length) return;
+
+    const headlineNorm = normalizeTitle(profileHeadline || '');
+    const nameNorm = normalizeTitle(profileName || '');
+
+    let matchedTitle = null;
+    for (const t of titles) {
+      const tNorm = normalizeTitle(t.label || '');
+      if (!tNorm) continue;
+      if (headlineNorm.includes(tNorm) || nameNorm.includes(tNorm)) {
+        matchedTitle = t;
+        break;
+      }
+    }
+
+    if (!matchedTitle) {
+      sendNotification(
+        'Pas de correspondance',
+        'Profil non associé à vos titres enregistrés. Ajoutez-le manuellement si besoin.'
+      );
+      return;
+    }
+
+    const already = leads.some((l) => l.profileUrl === profileUrl);
+    if (already) {
+      sendNotification(
+        'Déjà enregistré',
+        'Ce profil correspond à vos titres et est déjà dans vos leads.'
+      );
+      return;
+    }
+
+    const now = Date.now();
+    const newLead = {
+      id: now + '_' + Math.random().toString(36).slice(2),
+      name: profileName || 'Inconnu',
+      headline: profileHeadline || '',
+      profileUrl: profileUrl,
+      company: profileCompany || '',
+      searchTitle: matchedTitle.label || normalizeTitle(matchedTitle.label || ''),
+      direction: 'outbound_pending',
+      requestDate: new Date().toISOString().split('T')[0],
+      acceptanceDate: null,
+      contacted: false,
+      contactedDate: null,
+      topLead: false,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    leads.push(newLead);
+    await chrome.storage.local.set({ leads });
+    sendNotification(
+      'Lead enregistré',
+      `Ajout automatique : ${profileName || matchedTitle.label || profileUrl}`
+    );
+  } catch (e) {
+    console.warn('[LeadTracker] Auto-capture échouée:', e);
+  } finally {
+    autoCaptureInFlight = false;
+  }
+}
+
+function triggerAutoCaptureIfProfile() {
+  try {
+    const urlObj = new URL(window.location.href);
+    if (!urlObj.pathname.includes('/in/')) return;
+    if (lastAutoCapturePath === urlObj.pathname) return;
+    lastAutoCapturePath = urlObj.pathname;
+    setTimeout(autoCaptureProfileIfMatch, AUTO_CAPTURE_DELAY_MS);
+  } catch (e) {
+    console.warn("[LeadTracker] Impossible de lancer l'auto-capture:", e);
+  }
+}
+
+async function scanNetworkPageForAcceptances() {
+  try {
+    const urlObj = new URL(window.location.href);
+    const path = urlObj.pathname || '';
+    const isNetworkPage =
+      path.startsWith('/mynetwork/grow/') ||
+      path.startsWith('/mynetwork/invite-connect/connections/');
+    if (!isNetworkPage) return;
+    if (lastNetworkScanPath === path) return;
+    lastNetworkScanPath = path;
+
+    const anchors = Array.from(document.querySelectorAll('a[href*="/in/"]')).slice(0, 50);
+    const profileUrls = new Set();
+    anchors.forEach((a) => {
+      try {
+        const u = new URL(a.href);
+        profileUrls.add(u.origin + u.pathname.split('?')[0]);
+      } catch (e) {}
+    });
+    if (!profileUrls.size) return;
+
+    const { leads = [] } = await chrome.storage.local.get(['leads']);
+    let updated = false;
+    const today = new Date().toISOString().split('T')[0];
+
+    leads.forEach((l) => {
+      if (l.direction === 'outbound_pending' && profileUrls.has(l.profileUrl)) {
+        l.direction = 'outbound_accepted';
+        l.acceptanceDate = l.acceptanceDate || today;
+        l.updatedAt = Date.now();
+        updated = true;
+      }
+    });
+
+    if (updated) {
+      await chrome.storage.local.set({ leads });
+      sendNotification('Connexions détectées', 'Certains leads ont été marqués comme acceptés.');
+    }
+  } catch (e) {
+    console.warn('[LeadTracker] Scan mynetwork échoué:', e);
+  }
 }
 
 /**
@@ -345,12 +507,13 @@ function readProfileHeadline() {
  */
 function findProfileCard(buttonElement) {
   if (!buttonElement) return null;
-  let card = buttonElement.closest('[data-chameleon-result-urn]') 
-          || buttonElement.closest('.reusable-search__result-container')
-          || buttonElement.closest('.entity-result')
-          || buttonElement.closest('[data-view-name="search-entity-result-universal-template"]')
-          || buttonElement.closest('li[class*="reusable-search"]');
-  
+  let card =
+    buttonElement.closest('[data-chameleon-result-urn]') ||
+    buttonElement.closest('.reusable-search__result-container') ||
+    buttonElement.closest('.entity-result') ||
+    buttonElement.closest('[data-view-name="search-entity-result-universal-template"]') ||
+    buttonElement.closest('li[class*="reusable-search"]');
+
   if (card) return card;
 
   // Fallback : chercher dans un rayon plus large
@@ -391,20 +554,21 @@ function extractProfileFromSearchCard(buttonElement, providedCard = null) {
         }
       }
     }
-    
+
     let profileUrl = null;
     let profileName = null;
-    
+
     if (profileLink && profileLink.href) {
       try {
         const urlObj = new URL(profileLink.href);
         profileUrl = urlObj.origin + urlObj.pathname.split('?')[0]; // Nettoyer l'URL
-        
+
         // Le nom est souvent dans le lien ou juste à côté
-        profileName = profileLink.textContent?.trim() 
-                   || profileLink.querySelector('span[aria-hidden="true"]')?.textContent?.trim()
-                   || profileLink.querySelector('span')?.textContent?.trim()
-                   || profileLink.getAttribute('aria-label')?.trim();
+        profileName =
+          profileLink.textContent?.trim() ||
+          profileLink.querySelector('span[aria-hidden="true"]')?.textContent?.trim() ||
+          profileLink.querySelector('span')?.textContent?.trim() ||
+          profileLink.getAttribute('aria-label')?.trim();
       } catch (e) {
         console.error('[LeadTracker] Erreur parsing URL:', e);
       }
@@ -421,18 +585,19 @@ function extractProfileFromSearchCard(buttonElement, providedCard = null) {
         '[class*="title"] a',
         'a[href*="/in/"]'
       ];
-      
+
       for (const selector of nameSelectors) {
         const nameEl = card.querySelector(selector);
         if (nameEl) {
-          profileName = nameEl.innerText?.trim() 
-                     || nameEl.textContent?.trim()
-                     || nameEl.getAttribute('aria-label')?.trim();
+          profileName =
+            nameEl.innerText?.trim() ||
+            nameEl.textContent?.trim() ||
+            nameEl.getAttribute('aria-label')?.trim();
           if (profileName) break;
         }
       }
     }
-    
+
     // Extraire le headline avec plusieurs sélecteurs
     const headlineSelectors = [
       '.entity-result__primary-subtitle',
@@ -441,12 +606,12 @@ function extractProfileFromSearchCard(buttonElement, providedCard = null) {
       '[class*="subtitle"]',
       '[class*="summary"]'
     ];
-    
-    let profileHeadline = "";
+
+    let profileHeadline = '';
     for (const selector of headlineSelectors) {
       const headlineEl = card.querySelector(selector);
       if (headlineEl) {
-        profileHeadline = headlineEl.innerText?.trim() || headlineEl.textContent?.trim() || "";
+        profileHeadline = headlineEl.innerText?.trim() || headlineEl.textContent?.trim() || '';
         if (profileHeadline) break;
       }
     }
@@ -462,7 +627,7 @@ function extractProfileFromSearchCard(buttonElement, providedCard = null) {
       url: profileUrl
     };
   } catch (error) {
-    console.error("[LeadTracker] Erreur extraction profil:", error);
+    console.error('[LeadTracker] Erreur extraction profil:', error);
     return null;
   }
 }
@@ -473,114 +638,126 @@ function extractProfileFromSearchCard(buttonElement, providedCard = null) {
  */
 function setupConnectButtonListener() {
   console.log('[LeadTracker] Configuration du listener Connect...');
-  
+
   // Utiliser la délégation d'événements pour gérer les boutons dynamiques
-  document.addEventListener('click', async (e) => {
-    const target = e.target;
-    
-    // Vérifier qu'on est sur une page de recherche
-    if (!window.location.href.includes("/search/results/people")) {
-      // Log seulement si on clique sur un bouton (pour éviter trop de logs)
-      if (target.closest('button')) {
-        console.log('[LeadTracker] Clic détecté mais pas sur page de recherche:', window.location.href);
+  document.addEventListener(
+    'click',
+    async (e) => {
+      const target = e.target;
+
+      // Vérifier qu'on est sur une page de recherche
+      if (!window.location.href.includes('/search/results/people')) {
+        // Log seulement si on clique sur un bouton (pour éviter trop de logs)
+        if (target.closest('button')) {
+          console.log(
+            '[LeadTracker] Clic détecté mais pas sur page de recherche:',
+            window.location.href
+          );
+        }
+        return;
       }
-      return;
-    }
-    
-    console.log('[LeadTracker] Clic détecté sur page de recherche');
-    
-    // Chercher le bouton (ou élément role=button) le plus proche
-    let button = target.closest('button, [role="button"]');
-    if (!button && (target.tagName === 'BUTTON' || target.getAttribute('role') === 'button')) {
-      button = target;
-    }
-    if (!button) return;
-    
-    // Vérifier le texte ou aria-label du bouton (plusieurs variantes)
-    const buttonText = (button.textContent || '').trim().toLowerCase();
-    const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
-    const buttonId = (button.getAttribute('id') || '').toLowerCase();
-    const buttonClass = (button.getAttribute('class') || '').toLowerCase();
-    
-    // Vérifier aussi dans les spans enfants
-    const spans = button.querySelectorAll('span');
-    let spanText = '';
-    spans.forEach(span => {
-      const text = (span.textContent || '').trim().toLowerCase();
-      if (text.includes('connect') || text.includes('se connecter') || text.includes('pending')) {
-        spanText = text;
+
+      console.log('[LeadTracker] Clic détecté sur page de recherche');
+
+      // Chercher le bouton (ou élément role=button) le plus proche
+      let button = target.closest('button, [role="button"]');
+      if (!button && (target.tagName === 'BUTTON' || target.getAttribute('role') === 'button')) {
+        button = target;
       }
-    });
-    
-    // Vérifier aussi dans les éléments parents (parfois le texte est dans un parent)
-    let parentText = '';
-    let parent = button.parentElement;
-    for (let i = 0; i < 3 && parent; i++) {
-      const text = (parent.textContent || '').trim().toLowerCase();
-      if (text.includes('connect') || text.includes('se connecter')) {
-        parentText = text;
-        break;
+      if (!button) return;
+
+      // Vérifier le texte ou aria-label du bouton (plusieurs variantes)
+      const buttonText = (button.textContent || '').trim().toLowerCase();
+      const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+      const buttonId = (button.getAttribute('id') || '').toLowerCase();
+      const buttonClass = (button.getAttribute('class') || '').toLowerCase();
+
+      // Vérifier aussi dans les spans enfants
+      const spans = button.querySelectorAll('span');
+      let spanText = '';
+      spans.forEach((span) => {
+        const text = (span.textContent || '').trim().toLowerCase();
+        if (text.includes('connect') || text.includes('se connecter') || text.includes('pending')) {
+          spanText = text;
+        }
+      });
+
+      // Vérifier aussi dans les éléments parents (parfois le texte est dans un parent)
+      let parentText = '';
+      let parent = button.parentElement;
+      for (let i = 0; i < 3 && parent; i++) {
+        const text = (parent.textContent || '').trim().toLowerCase();
+        if (text.includes('connect') || text.includes('se connecter')) {
+          parentText = text;
+          break;
+        }
+        parent = parent.parentElement;
       }
-      parent = parent.parentElement;
-    }
-    
-    const isConnectButton = buttonText.includes('connect') 
-                         || buttonText.includes('se connecter')
-                         || buttonText.includes('pending')
-                         || ariaLabel.includes('connect')
-                         || ariaLabel.includes('se connecter')
-                         || spanText.includes('connect')
-                         || spanText.includes('se connecter')
-                         || parentText.includes('connect')
-                         || buttonId.includes('connect')
-                         || buttonClass.includes('connect');
 
-    if (!isConnectButton) return;
+      const isConnectButton =
+        buttonText.includes('connect') ||
+        buttonText.includes('se connecter') ||
+        buttonText.includes('pending') ||
+        ariaLabel.includes('connect') ||
+        ariaLabel.includes('se connecter') ||
+        spanText.includes('connect') ||
+        spanText.includes('se connecter') ||
+        parentText.includes('connect') ||
+        buttonId.includes('connect') ||
+        buttonClass.includes('connect');
 
-    // Capturer la carte immédiatement (avant un éventuel re-render LinkedIn)
-    const initialCard = findProfileCard(button);
+      if (!isConnectButton) return;
 
-    console.log('[LeadTracker] ✅ Clic sur Connect détecté!', {
-      buttonText,
-      ariaLabel,
-      buttonId,
-      url: window.location.href,
-      cardFound: !!initialCard
-    });
+      // Capturer la carte immédiatement (avant un éventuel re-render LinkedIn)
+      const initialCard = findProfileCard(button);
 
-    // Petit délai pour laisser LinkedIn mettre à jour le bouton (devient "Pending")
-    setTimeout(async () => {
-      // Extraire les infos du profil depuis la carte
-      const profileInfo = extractProfileFromSearchCard(button, initialCard);
-      
-      if (profileInfo) {
-        console.log('[LeadTracker] ✅ Profil extrait:', profileInfo);
-        
-        // Stocker temporairement les infos pour le popup
-        await chrome.storage.local.set({
-          pendingLead: {
-            ...profileInfo,
-            timestamp: Date.now()
-          }
-        });
+      console.log('[LeadTracker] ✅ Clic sur Connect détecté!', {
+        buttonText,
+        ariaLabel,
+        buttonId,
+        url: window.location.href,
+        cardFound: !!initialCard
+      });
 
-        // Afficher un badge sur l'icône pour indiquer qu'il y a un lead en attente
-        chrome.runtime.sendMessage({
-          type: "SHOW_BADGE",
-          text: "1"
-        }).catch((err) => {
-          console.warn('[LeadTracker] Erreur envoi badge:', err);
-        });
-        
-        console.log('[LeadTracker] ✅ Lead en attente sauvegardé dans storage');
-      } else {
-        console.warn('[LeadTracker] ❌ Impossible d\'extraire les infos du profil depuis la carte');
-        console.log('[LeadTracker] Debug - Bouton:', button);
-        console.log('[LeadTracker] Debug - Parent:', button.parentElement);
-      }
-    }, 300); // Augmenter le délai pour laisser LinkedIn charger
-  }, true); // Utiliser capture pour intercepter tôt
-  
+      // Petit délai pour laisser LinkedIn mettre à jour le bouton (devient "Pending")
+      setTimeout(async () => {
+        // Extraire les infos du profil depuis la carte
+        const profileInfo = extractProfileFromSearchCard(button, initialCard);
+
+        if (profileInfo) {
+          console.log('[LeadTracker] ✅ Profil extrait:', profileInfo);
+
+          // Stocker temporairement les infos pour le popup
+          await chrome.storage.local.set({
+            pendingLead: {
+              ...profileInfo,
+              timestamp: Date.now()
+            }
+          });
+
+          // Afficher un badge sur l'icône pour indiquer qu'il y a un lead en attente
+          chrome.runtime
+            .sendMessage({
+              type: 'SHOW_BADGE',
+              text: '1'
+            })
+            .catch((err) => {
+              console.warn('[LeadTracker] Erreur envoi badge:', err);
+            });
+
+          console.log('[LeadTracker] ✅ Lead en attente sauvegardé dans storage');
+        } else {
+          console.warn(
+            "[LeadTracker] ❌ Impossible d'extraire les infos du profil depuis la carte"
+          );
+          console.log('[LeadTracker] Debug - Bouton:', button);
+          console.log('[LeadTracker] Debug - Parent:', button.parentElement);
+        }
+      }, 300); // Augmenter le délai pour laisser LinkedIn charger
+    },
+    true
+  ); // Utiliser capture pour intercepter tôt
+
   console.log('[LeadTracker] ✅ Listener Connect configuré');
 }
 
@@ -590,10 +767,14 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     console.log('[LeadTracker] DOM chargé, setup du listener');
     setupConnectButtonListener();
+    triggerAutoCaptureIfProfile();
+    scanNetworkPageForAcceptances();
   });
 } else {
   console.log('[LeadTracker] DOM déjà chargé, setup immédiat');
   setupConnectButtonListener();
+  triggerAutoCaptureIfProfile();
+  scanNetworkPageForAcceptances();
 }
 
 // Vérifier qu'on est sur LinkedIn

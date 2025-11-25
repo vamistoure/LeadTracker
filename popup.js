@@ -2,15 +2,38 @@
 const getById = (id) => document.getElementById(id);
 
 const showView = (id) => {
-  document.querySelectorAll('.view').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.view').forEach((el) => el.classList.add('hidden'));
   const view = getById(id);
   if (view) view.classList.remove('hidden');
 };
 
+function setContextBadge(label = '', tone = 'info') {
+  const badge = getById('contextBadge');
+  if (!badge) return;
+  badge.textContent = label || '';
+  badge.className = 'context-badge';
+  if (!label) {
+    badge.classList.add('hidden');
+    return;
+  }
+  badge.classList.remove('hidden');
+  badge.classList.add(`tone-${tone}`);
+}
+
 const getTodayDate = () => new Date().toISOString().split('T')[0];
-const formatTitle = (label = "") => {
-  const trimmed = label.trim();
-  return trimmed.toUpperCase();
+const formatTitle = (label = '') =>
+  window?.formatTitle ? window.formatTitle(label) : (label || '').trim().toUpperCase();
+const canonicalizeTitle = (label, titles = []) => {
+  const norm = formatTitle(label || '');
+  if (!norm) return '';
+  const map = new Map();
+  titles.forEach((t) => {
+    const n = formatTitle(t.label || '');
+    if (n && !map.has(n)) {
+      map.set(n, t.label);
+    }
+  });
+  return map.get(norm) || norm;
 };
 const formatDisplayDate = (dateString) => dateString || '–';
 function getDaysDiff(dateString) {
@@ -45,6 +68,43 @@ function computeExistingState(lead) {
   return 'contacted';
 }
 
+function configureExistingButtons(lead, state) {
+  const statusEl = getById('existingStatus');
+  const messageEl = getById('existingMessage');
+  const primaryBtn = getById('btnExistingPrimary');
+  const secondaryBtn = getById('btnExistingSecondary');
+  if (!statusEl || !messageEl || !primaryBtn || !secondaryBtn) return;
+
+  statusEl.className = 'status-badge';
+  secondaryBtn.classList.add('hidden');
+  secondaryBtn.textContent = '';
+
+  if (state === 'pending') {
+    statusEl.classList.add('pending');
+    statusEl.textContent = 'En attente';
+    messageEl.textContent = `Demande envoyée le ${formatDisplayDate(lead.requestDate)} – en attente d’acceptation.`;
+    primaryBtn.textContent = 'Ils ont accepté ma demande';
+    return;
+  }
+
+  if (state === 'to_contact') {
+    statusEl.classList.add('to-contact');
+    statusEl.textContent = 'À contacter';
+    const days = getDaysDiff(lead.acceptanceDate);
+    const dayText = days !== null ? ` (J+${days})` : '';
+    messageEl.textContent = `Connexion acceptée le ${formatDisplayDate(lead.acceptanceDate)}${dayText}. Tu n’as pas encore contacté ce lead.`;
+    primaryBtn.textContent = 'Marquer comme contacté aujourd’hui';
+    return;
+  }
+
+  statusEl.classList.add('contacted');
+  statusEl.textContent = 'Contacté';
+  messageEl.textContent = `Lead contacté le ${formatDisplayDate(lead.contactedDate)}.`;
+  primaryBtn.textContent = 'Mettre à jour la date de contact';
+  secondaryBtn.textContent = 'Marquer comme non contacté';
+  secondaryBtn.classList.remove('hidden');
+}
+
 function formatDirection(direction) {
   if (direction === 'outbound_pending') return 'Demande envoyée (en attente)';
   if (direction === 'outbound_accepted') return 'Outbound (acceptée)';
@@ -56,17 +116,18 @@ async function updateExistingLead(updates) {
   try {
     const storage = await chrome.storage.local.get(['leads']);
     let leads = storage.leads || [];
-    const idx = leads.findIndex(l => l.id === currentExistingLead?.id);
+    const idx = leads.findIndex((l) => l.id === currentExistingLead?.id);
     if (idx === -1) return;
     leads[idx] = {
       ...leads[idx],
-      ...updates
+      ...updates,
+      updatedAt: Date.now()
     };
     await chrome.storage.local.set({ leads });
     currentExistingLead = leads[idx];
     renderExistingLead(currentExistingLead);
   } catch (e) {
-    console.error("[LeadTracker] Erreur mise à jour lead existant:", e);
+    console.error('[LeadTracker] Erreur mise à jour lead existant:', e);
   }
 }
 
@@ -75,6 +136,7 @@ function renderExistingLead(lead) {
   currentExistingLead = lead;
   currentExistingState = computeExistingState(lead);
   showView('view-existing');
+  setContextBadge('Lead déjà enregistré', 'success');
 
   getById('existingName').textContent = lead.name || 'Inconnu';
   getById('existingHeadline').textContent = lead.headline || '';
@@ -85,40 +147,7 @@ function renderExistingLead(lead) {
   getById('existingAcceptanceDate').textContent = formatDisplayDate(lead.acceptanceDate);
   getById('existingContactDate').textContent = formatDisplayDate(lead.contactedDate);
 
-  const statusEl = getById('existingStatus');
-  statusEl.className = 'status-badge';
-  const messageEl = getById('existingMessage');
-  const primaryBtn = getById('btnExistingPrimary');
-  const secondaryBtn = getById('btnExistingSecondary');
-
-  let statusText = '';
-  let messageText = '';
-  secondaryBtn.classList.add('hidden');
-  secondaryBtn.textContent = '';
-
-  if (currentExistingState === 'pending') {
-    statusText = 'En attente';
-    statusEl.classList.add('pending');
-    messageText = `Demande envoyée le ${formatDisplayDate(lead.requestDate)} – en attente d’acceptation.`;
-    primaryBtn.textContent = 'Ils ont accepté ma demande';
-  } else if (currentExistingState === 'to_contact') {
-    statusText = 'À contacter';
-    statusEl.classList.add('to-contact');
-    const days = getDaysDiff(lead.acceptanceDate);
-    const dayText = days !== null ? ` (J+${days})` : '';
-    messageText = `Connexion acceptée le ${formatDisplayDate(lead.acceptanceDate)}${dayText}. Tu n’as pas encore contacté ce lead.`;
-    primaryBtn.textContent = 'Marquer comme contacté aujourd’hui';
-  } else {
-    statusText = 'Contacté';
-    statusEl.classList.add('contacted');
-    messageText = `Lead contacté le ${formatDisplayDate(lead.contactedDate)}.`;
-    primaryBtn.textContent = 'Mettre à jour la date de contact';
-    secondaryBtn.textContent = 'Marquer comme non contacté';
-    secondaryBtn.classList.remove('hidden');
-  }
-
-  statusEl.textContent = statusText;
-  messageEl.textContent = messageText;
+  configureExistingButtons(lead, currentExistingState);
 }
 
 const showGlobalFeedback = (message, type = 'info') => {
@@ -129,10 +158,10 @@ const showGlobalFeedback = (message, type = 'info') => {
 function setButtonLoading(buttonId, isLoading) {
   const button = getById(buttonId);
   if (!button) return;
-  
+
   const textSpan = getById(buttonId + 'Text');
   const loaderSpan = getById(buttonId + 'Loader');
-  
+
   if (isLoading) {
     button.disabled = true;
     if (textSpan) textSpan.style.opacity = '0.6';
@@ -144,6 +173,26 @@ function setButtonLoading(buttonId, isLoading) {
   }
 }
 
+function getDashboardUrl(params = {}) {
+  const baseUrl = chrome.runtime.getURL ? chrome.runtime.getURL('options.html') : 'options.html';
+  const search = new URLSearchParams();
+  if (params.leadId) search.set('leadId', params.leadId);
+  if (params.profileUrl) search.set('profileUrl', params.profileUrl);
+  const query = search.toString();
+  return query ? `${baseUrl}?${query}` : baseUrl;
+}
+
+function openDashboard(params = {}) {
+  const targetUrl = getDashboardUrl(params);
+  if (chrome.tabs?.create) {
+    chrome.tabs.create({ url: targetUrl });
+    return;
+  }
+  if (!params.leadId && !params.profileUrl && chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
+  }
+}
+
 // State global
 let currentContext = null;
 let existingLeadId = null; // ID du lead existant si on est en mode mise à jour
@@ -151,8 +200,21 @@ let isFromConnectButton = false; // Flag pour indiquer si le contexte vient d'un
 let currentExistingLead = null;
 let currentExistingState = null;
 
+function harmonizeLeads() {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ type: 'HARMONIZE_LEADS' }, () => resolve());
+    } catch (e) {
+      console.warn('[LeadTracker] Harmonize leads failed:', e);
+      resolve();
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  await harmonizeLeads();
   showView('loading');
+  setContextBadge('Analyse de la page...', 'info');
 
   // Obtenir l'onglet actif
   let tab;
@@ -165,15 +227,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
   } catch (error) {
-    console.error("[LeadTracker] Erreur onglet:", error);
+    console.error('[LeadTracker] Erreur onglet:', error);
     showView('view-other');
+    setContextBadge('Extension inactive', 'warning');
     showGlobalFeedback("Erreur lors de la récupération de l'onglet. Réessayez.", 'error');
     return;
   }
-  
-  if (!tab.url.includes("linkedin.com")) {
+
+  if (!tab.url.includes('linkedin.com')) {
     showView('view-other');
-    showGlobalFeedback("Ouvrez une recherche LinkedIn ou un profil pour utiliser l'extension.", 'info');
+    setContextBadge('Hors LinkedIn', 'warning');
+    showGlobalFeedback(
+      "Ouvrez une recherche LinkedIn ou un profil pour utiliser l'extension.",
+      'info'
+    );
     setupEventListeners();
     return;
   }
@@ -181,36 +248,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Vérifier s'il y a un lead en attente (depuis un clic sur "Connect")
   const storage = await chrome.storage.local.get(['pendingLead']);
   const pendingLead = storage.pendingLead;
-  
+
   // Si on a un lead en attente, utiliser ces infos (peu importe la page actuelle)
   if (pendingLead) {
-    const isOnPendingProfile = tab.url.includes(pendingLead.url.split('/in/')[1]?.split('/')[0] || '');
-    
-    if (tab.url.includes("/search/results/people") || !isOnPendingProfile) {
+    const isOnPendingProfile = tab.url.includes(
+      pendingLead.url.split('/in/')[1]?.split('/')[0] || ''
+    );
+
+    if (tab.url.includes('/search/results/people') || !isOnPendingProfile) {
       isFromConnectButton = true;
       const context = {
-        contextType: "profile",
+        contextType: 'profile',
         searchKeyword: null,
         profileName: pendingLead.name,
-        profileHeadline: pendingLead.headline || "",
+        profileHeadline: pendingLead.headline || '',
         profileUrl: pendingLead.url
       };
-      
+
       await chrome.storage.local.remove(['pendingLead']);
-      chrome.action.setBadgeText({ text: "" });
-      
+      chrome.action.setBadgeText({ text: '' });
+
       handleContext(context);
       setupEventListeners();
       return;
     }
   }
-  
+
   // Comportement normal : demander le contexte au content script
   try {
     if (!tab || !tab.id) {
-      throw new Error("Onglet invalide");
+      throw new Error('Onglet invalide');
     }
-    const response = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_CONTEXT" });
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTEXT' });
     if (response) {
       handleContext(response);
     } else {
@@ -221,15 +290,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           handleContext(retry);
         } else {
           showView('view-other');
-          showGlobalFeedback("Contexte non détecté. Rafraîchissez la page LinkedIn.", 'warning');
+          setContextBadge('Contexte non détecté', 'warning');
+          showGlobalFeedback('Contexte non détecté. Rafraîchissez la page LinkedIn.', 'warning');
         }
       } else {
         showView('view-other');
-        showGlobalFeedback("Contexte non détecté. Rafraîchissez la page LinkedIn.", 'warning');
+        setContextBadge('Contexte non détecté', 'warning');
+        showGlobalFeedback('Contexte non détecté. Rafraîchissez la page LinkedIn.', 'warning');
       }
     }
   } catch (error) {
-    console.error("[LeadTracker] Erreur communication content script:", error);
+    console.error('[LeadTracker] Erreur communication content script:', error);
     const injected = tab?.id ? await tryInjectContentScript(tab.id) : false;
     if (injected) {
       const retry = await safeGetContext(tab.id);
@@ -240,7 +311,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     showView('view-other');
-    showGlobalFeedback("Extension inactive sur cette page. Rafraîchissez la page LinkedIn.", 'warning');
+    setContextBadge('Extension inactive', 'warning');
+    showGlobalFeedback(
+      'Extension inactive sur cette page. Rafraîchissez la page LinkedIn.',
+      'warning'
+    );
   }
 
   setupEventListeners();
@@ -248,17 +323,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function safeGetContext(tabId) {
   try {
-    return await chrome.tabs.sendMessage(tabId, { type: "GET_PAGE_CONTEXT" });
+    return await chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTEXT' });
   } catch (e) {
-    console.warn("[LeadTracker] safeGetContext failed:", e);
+    console.warn('[LeadTracker] safeGetContext failed:', e);
     return null;
   }
 }
 
 async function tryInjectContentScript(tabId) {
   if (!chrome.scripting || !chrome.scripting.executeScript) {
-    console.warn("[LeadTracker] chrome.scripting non disponible.");
-    showGlobalFeedback("Extension inactive sur cette page. Rafraîchissez la page LinkedIn.", 'warning');
+    console.warn('[LeadTracker] chrome.scripting non disponible.');
+    showGlobalFeedback(
+      'Extension inactive sur cette page. Rafraîchissez la page LinkedIn.',
+      'warning'
+    );
     return false;
   }
   try {
@@ -266,10 +344,10 @@ async function tryInjectContentScript(tabId) {
       target: { tabId },
       files: ['contentScript.js']
     });
-    console.log("[LeadTracker] Content script réinjecté via scripting API.");
+    console.log('[LeadTracker] Content script réinjecté via scripting API.');
     return true;
   } catch (e) {
-    console.warn("[LeadTracker] Injection content script échouée:", e);
+    console.warn('[LeadTracker] Injection content script échouée:', e);
     return false;
   }
 }
@@ -283,13 +361,15 @@ function handleContext(context) {
     initProfileView(context);
   } else {
     showView('view-other');
+    setContextBadge('Hors LinkedIn', 'warning');
   }
 }
 
 // --- Vue Recherche ---
 function initSearchView(context) {
   showView('view-search');
-  showGlobalFeedback("", "info");
+  setContextBadge('Recherche LinkedIn détectée', 'info');
+  showGlobalFeedback('', 'info');
   const input = getById('searchTitleInput');
   if (context.searchKeyword) {
     input.value = context.searchKeyword;
@@ -299,32 +379,35 @@ function initSearchView(context) {
 // --- Vue Profil ---
 async function initProfileView(context) {
   showView('view-profile');
-  
+  setContextBadge('Profil LinkedIn détecté', 'info');
+
   // Remplir infos statiques
-  const profileName = context.profileName || "Inconnu";
+  const profileName = context.profileName || 'Inconnu';
   getById('leadName').value = profileName;
-  getById('leadHeadline').value = context.profileHeadline || "";
-  getById('leadCompany').value = context.profileCompany || "";
-  getById('leadUrl').value = context.profileUrl || "";
-  
-  if (profileName === "Inconnu" && context.profileUrl && context.profileUrl.includes("/in/")) {
+  getById('leadHeadline').value = context.profileHeadline || '';
+  getById('leadCompany').value = context.profileCompany || '';
+  getById('leadUrl').value = context.profileUrl || '';
+
+  if (profileName === 'Inconnu' && context.profileUrl && context.profileUrl.includes('/in/')) {
     showFeedback('leadFeedback', 'Nom non détecté. Rafraîchissez la page si besoin.', 'warning');
   }
-  
+
   const storage = await chrome.storage.local.get(['leads', 'searchTitles']);
   const leads = storage.leads || [];
-  const existingLead = leads.find(l => l.profileUrl === context.profileUrl);
-  
+  const existingLead = leads.find((l) => l.profileUrl === context.profileUrl);
+
   // Charger les titres de recherche
-  const titles = (storage.searchTitles || []).map(t => ({
-    ...t,
-    formattedLabel: formatTitle(t.label || '')
-  })).sort((a, b) => a.formattedLabel.localeCompare(b.formattedLabel));
-  
+  const titles = (storage.searchTitles || [])
+    .map((t) => ({
+      ...t,
+      formattedLabel: formatTitle(t.label || '')
+    }))
+    .sort((a, b) => a.formattedLabel.localeCompare(b.formattedLabel));
+
   const select = getById('searchTitleSelect');
   select.innerHTML = '<option value="" disabled selected>Choisir...</option>';
-  
-  titles.forEach(t => {
+
+  titles.forEach((t) => {
     const opt = document.createElement('option');
     opt.value = t.label;
     opt.textContent = t.formattedLabel || t.label;
@@ -333,8 +416,8 @@ async function initProfileView(context) {
 
   // Option "Autre"
   const otherOpt = document.createElement('option');
-  otherOpt.value = "__custom__";
-  otherOpt.textContent = "Autre (Nouveau)...";
+  otherOpt.value = '__custom__';
+  otherOpt.textContent = 'Autre (Nouveau)...';
   select.appendChild(otherOpt);
 
   const emptyHint = getById('emptyTitlesHint');
@@ -346,6 +429,7 @@ async function initProfileView(context) {
   if (existingLead) {
     existingLeadId = existingLead.id;
     currentExistingLead = existingLead;
+    setContextBadge('Lead déjà enregistré', 'success');
     renderExistingLead(existingLead);
     return;
   } else {
@@ -356,12 +440,20 @@ async function initProfileView(context) {
     getById('isContacted').checked = false;
     const topLeadCheckbox = getById('isTopLead');
     if (topLeadCheckbox) topLeadCheckbox.checked = false;
-    
+
     if (isFromConnectButton) {
-      showFeedback('leadFeedback', 'Profil détecté après votre clic sur \"Connect\". Complétez puis enregistrez.', 'info');
+      showFeedback(
+        'leadFeedback',
+        'Profil détecté après votre clic sur \"Connect\". Complétez puis enregistrez.',
+        'info'
+      );
       isFromConnectButton = false;
     } else {
-      showFeedback('leadFeedback', 'Après avoir envoyé une demande, enregistrez le lead ici.', 'info');
+      showFeedback(
+        'leadFeedback',
+        'Après avoir envoyé une demande, enregistrez le lead ici.',
+        'info'
+      );
     }
   }
 }
@@ -369,15 +461,24 @@ async function initProfileView(context) {
 // --- Event Listeners ---
 function setupEventListeners() {
   // Bouton Dashboard
-  ['btnOpenDashboard', 'btnOpenDashboardAlt'].forEach(id => {
+  ['btnOpenDashboard', 'btnOpenDashboardAlt'].forEach((id) => {
     const btn = getById(id);
     if (btn) {
-      btn.addEventListener('click', () => chrome.runtime.openOptionsPage());
+      btn.addEventListener('click', () => openDashboard());
     }
   });
   const btnExistingDashboard = getById('btnExistingDashboard');
   if (btnExistingDashboard) {
-    btnExistingDashboard.addEventListener('click', () => chrome.runtime.openOptionsPage());
+    btnExistingDashboard.addEventListener('click', () => {
+      if (currentExistingLead) {
+        openDashboard({
+          leadId: currentExistingLead.id,
+          profileUrl: currentExistingLead.profileUrl
+        });
+      } else {
+        openDashboard();
+      }
+    });
   }
 
   // -- RECHERCHE : Save --
@@ -398,8 +499,8 @@ function setupEventListeners() {
         const storage = await chrome.storage.local.get(['searchTitles']);
         let titles = storage.searchTitles || [];
 
-        const exists = titles.some(t => t.label.toLowerCase() === label.toLowerCase());
-        
+        const exists = titles.some((t) => t.label.toLowerCase() === label.toLowerCase());
+
         if (!exists) {
           titles.push({
             id: Date.now() + '_' + Math.random().toString(36).slice(2),
@@ -407,20 +508,24 @@ function setupEventListeners() {
             createdAt: Date.now()
           });
           await chrome.storage.local.set({ searchTitles: titles });
-          
+
           setButtonLoading('btnSaveSearch', false);
           showFeedback('searchFeedback', 'Titre enregistré.', 'success');
-          
+
           setTimeout(() => window.close(), 1500);
         } else {
           setButtonLoading('btnSaveSearch', false);
-          showFeedback('searchFeedback', 'Ce titre existe déjà. Vous pouvez l\'utiliser pour vos leads.', 'info');
-          
+          showFeedback(
+            'searchFeedback',
+            "Ce titre existe déjà. Vous pouvez l'utiliser pour vos leads.",
+            'info'
+          );
+
           setTimeout(() => window.close(), 2000);
         }
       } catch (error) {
         setButtonLoading('btnSaveSearch', false);
-        showFeedback('searchFeedback', 'Erreur lors de l\'enregistrement.', 'error');
+        showFeedback('searchFeedback', "Erreur lors de l'enregistrement.", 'error');
         console.error('Erreur sauvegarde titre:', error);
       }
     });
@@ -434,7 +539,10 @@ function setupEventListeners() {
       if (state === 'pending') {
         await updateExistingLead({
           acceptanceDate: getTodayDate(),
-          direction: currentExistingLead.direction === 'outbound_pending' ? 'outbound_accepted' : currentExistingLead.direction
+          direction:
+            currentExistingLead.direction === 'outbound_pending'
+              ? 'outbound_accepted'
+              : currentExistingLead.direction
         });
       } else if (state === 'to_contact') {
         await updateExistingLead({
@@ -467,7 +575,7 @@ function setupEventListeners() {
   // -- PROFIL : Select Change --
   const select = getById('searchTitleSelect');
   const customInput = getById('customTitleInput');
-  
+
   if (select) {
     select.addEventListener('change', (e) => {
       if (e.target.value === '__custom__') {
@@ -484,8 +592,8 @@ function setupEventListeners() {
   const acceptanceDateInput = getById('acceptanceDate');
   const acceptanceDateRequired = getById('acceptanceDateRequired');
   const requestDateInput = getById('requestDate');
-  
-  connectionRadios.forEach(radio => {
+
+  connectionRadios.forEach((radio) => {
     radio.addEventListener('change', (e) => {
       if (e.target.value === 'outbound_pending') {
         acceptanceDateInput.removeAttribute('required');
@@ -512,12 +620,9 @@ function setupEventListeners() {
   const btnSaveLead = getById('btnSaveLead');
   if (btnSaveLead) {
     btnSaveLead.addEventListener('click', async () => {
-      let searchTitle = select.value;
-      if (searchTitle === '__custom__') {
-        searchTitle = formatTitle(customInput.value.trim());
-      } else {
-        searchTitle = formatTitle(searchTitle);
-      }
+      const rawSelection = select.value;
+      const rawTitle = rawSelection === '__custom__' ? customInput.value.trim() : rawSelection;
+      const normalizedTitle = formatTitle(rawTitle);
 
       const connectionType = document.querySelector('input[name="connectionType"]:checked').value;
       const acceptanceDate = getById('acceptanceDate').value || null;
@@ -525,12 +630,16 @@ function setupEventListeners() {
       const isContacted = getById('isContacted').checked;
       const isTopLead = getById('isTopLead')?.checked || false;
 
-      if (!searchTitle || searchTitle === "") {
+      if (!normalizedTitle || normalizedTitle === '') {
         showFeedback('leadFeedback', 'Le titre de recherche est obligatoire.', 'error');
         return;
       }
       if (connectionType !== 'outbound_pending' && !acceptanceDate) {
-        showFeedback('leadFeedback', 'La date d\'acceptation est requise pour une connexion acceptée.', 'error');
+        showFeedback(
+          'leadFeedback',
+          "La date d'acceptation est requise pour une connexion acceptée.",
+          'error'
+        );
         return;
       }
 
@@ -538,14 +647,16 @@ function setupEventListeners() {
       showFeedback('leadFeedback', 'Enregistrement en cours...', 'info');
 
       try {
-        if (select.value === '__custom__') {
-          const storageTitles = await chrome.storage.local.get(['searchTitles']);
-          let titles = storageTitles.searchTitles || [];
-          const exists = titles.some(t => t.label.toLowerCase() === searchTitle.toLowerCase());
+        const storageTitles = await chrome.storage.local.get(['searchTitles']);
+        let titles = storageTitles.searchTitles || [];
+        const canonicalTitle = canonicalizeTitle(rawTitle, titles);
+
+        if (rawSelection === '__custom__') {
+          const exists = titles.some((t) => formatTitle(t.label) === normalizedTitle);
           if (!exists) {
             titles.push({
               id: Date.now() + '_custom',
-              label: formatTitle(searchTitle),
+              label: canonicalTitle,
               createdAt: Date.now()
             });
             await chrome.storage.local.set({ searchTitles: titles });
@@ -557,11 +668,11 @@ function setupEventListeners() {
 
         let targetIndex = -1;
         if (existingLeadId) {
-          targetIndex = leads.findIndex(l => l.id === existingLeadId);
+          targetIndex = leads.findIndex((l) => l.id === existingLeadId);
         }
         const profileUrl = getById('leadUrl').value;
         if (targetIndex === -1) {
-          targetIndex = leads.findIndex(l => {
+          targetIndex = leads.findIndex((l) => {
             if (connectionType === 'outbound_pending' && l.direction === 'outbound_pending') {
               return l.profileUrl === profileUrl;
             } else if (connectionType !== 'outbound_pending') {
@@ -572,14 +683,14 @@ function setupEventListeners() {
         }
 
         const targetLead = targetIndex !== -1 ? leads[targetIndex] : null;
-        const contactedDate = isContacted ? (targetLead?.contactedDate || getTodayDate()) : null;
+        const contactedDate = isContacted ? targetLead?.contactedDate || getTodayDate() : null;
 
         const leadData = {
           name: getById('leadName').value,
           headline: getById('leadHeadline').value,
           profileUrl: profileUrl,
           company: getById('leadCompany').value || '',
-          searchTitle: searchTitle,
+          searchTitle: canonicalTitle,
           direction: connectionType,
           requestDate: requestDate,
           acceptanceDate: acceptanceDate,
@@ -589,35 +700,37 @@ function setupEventListeners() {
         };
 
         if (targetIndex !== -1) {
-          leads[targetIndex] = { 
-            ...leads[targetIndex], 
+          leads[targetIndex] = {
+            ...leads[targetIndex],
             ...leadData,
             id: leads[targetIndex].id,
-            createdAt: leads[targetIndex].createdAt
+            createdAt: leads[targetIndex].createdAt,
+            updatedAt: Date.now()
           };
           await chrome.storage.local.set({ leads: leads });
-          
+
           setButtonLoading('btnSaveLead', false);
           showFeedback('leadFeedback', 'Lead mis à jour.', 'success');
-          
+
           setTimeout(() => window.close(), 1500);
         } else {
           const newLead = {
             ...leadData,
             id: Date.now() + '_' + Math.random().toString(36).slice(2),
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           };
           leads.push(newLead);
           await chrome.storage.local.set({ leads: leads });
-          
+
           setButtonLoading('btnSaveLead', false);
           showFeedback('leadFeedback', 'Lead enregistré.', 'success');
-          
+
           setTimeout(() => window.close(), 1500);
         }
       } catch (error) {
         setButtonLoading('btnSaveLead', false);
-        showFeedback('leadFeedback', 'Erreur lors de l\'enregistrement.', 'error');
+        showFeedback('leadFeedback', "Erreur lors de l'enregistrement.", 'error');
         console.error('Erreur sauvegarde lead:', error);
       }
     });

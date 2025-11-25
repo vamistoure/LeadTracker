@@ -19,15 +19,8 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": [
-    "storage",
-    "notifications",
-    "alarms",
-    "tabs"
-  ],
-  "host_permissions": [
-    "https://www.linkedin.com/*"
-  ],
+  "permissions": ["storage", "notifications", "alarms", "tabs"],
+  "host_permissions": ["https://www.linkedin.com/*"],
   "options_page": "options.html",
   "content_scripts": [
     {
@@ -37,4 +30,3 @@
     }
   ]
 }
-

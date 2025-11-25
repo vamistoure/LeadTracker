@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>LeadTracker - Metrics</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="page metrics-page">
+      <header class="topbar">
+        <div>
+          <div class="app-title">LeadTracker <sup class="reg-symbol">®</sup></div>
+          <div class="app-subtitle">Metrics et analyses</div>
+        </div>
+        <div class="top-actions">
+          <button id="btnBackDashboard" class="btn ghost">Retour dashboard</button>
+        </div>
+      </header>
+
+      <div id="metricsFeedback" class="feedback hidden" role="status"></div>
+
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">Résumé</div>
+          <div class="card-subtitle muted small">Aperçu rapide des volumes et statuts.</div>
+        </div>
+        <div class="metrics-cards" id="summaryCards"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Comparaison Entreprise vs Titre (30 jours)</div>
+            <div class="card-subtitle muted small">
+              Barres pour les entreprises, ligne pour les titres. Utilisez les slicers.
+            </div>
+          </div>
+          <div class="metrics-controls">
+            <button
+              id="btnResetFilters"
+              class="btn ghost icon-only reset-filters"
+              title="Réinitialiser les filtres"
+              aria-label="Réinitialiser les filtres"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path
+                  d="M3 12a9 9 0 1 1 9 9"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  fill="none"
+                />
+                <path
+                  d="M3 3v6h6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  fill="none"
+                />
+              </svg>
+            </button>
+            <label class="control">
+              <span>Entreprise</span>
+              <select id="companySelect"></select>
+            </label>
+            <label class="control">
+              <span>Titre</span>
+              <select id="titleSelect"></select>
+            </label>
+          </div>
+        </div>
+        <div id="chartDimension" class="chart-block"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Répartition par type</div>
+            <div class="card-subtitle muted small">Inbound vs outbound.</div>
+          </div>
+          <div class="pie-legend" id="pieLegend"></div>
+        </div>
+        <div class="chart-row">
+          <div id="chartDirection" class="pie-container"></div>
+          <div class="pie-note">
+            <div class="note-title">Comment lire ?</div>
+            <p class="muted small">
+              Cette répartition montre la part des leads reçus (inbound) vs envoyés (outbound).
+              Surveillez un équilibre sain et la progression des inbound pour réduire l’effort
+              commercial.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">Nouveaux leads (30 derniers jours)</div>
+          <div class="card-subtitle muted small">Basé sur la date de création.</div>
+        </div>
+        <div id="chartTimeline" class="chart-block"></div>
+      </section>
+    </div>
+
+    <script src="constants.js"></script>
+    <script src="utils.js"></script>
+    <script src="metrics.js"></script>
+  </body>
+</html>
