@@ -29,6 +29,21 @@ body {
   margin-bottom: 16px;
 }
 
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(10, 102, 194, 0.25);
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
 .app-title {
   font-size: 22px;
   font-weight: 700;
@@ -270,15 +285,31 @@ body {
 
 .filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
+  grid-auto-rows: 1fr;
 }
 
 .filter {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  height: 100%;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.pill-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.pill.actions {
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
 }
 
 .filter label {
@@ -289,7 +320,8 @@ body {
 
 select,
 input[type='date'],
-input[type='text'] {
+input[type='text'],
+input[type='number'] {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #cbd5e1;
@@ -299,12 +331,14 @@ input[type='text'] {
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
-  min-height: 42px;
+  min-height: 44px;
+  line-height: 1.4;
 }
 
 select:focus,
 input[type='date']:focus,
-input[type='text']:focus {
+input[type='text']:focus,
+input[type='number']:focus {
   outline: none;
   border-color: #0a66c2;
   box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.15);
@@ -329,6 +363,7 @@ table {
   min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: auto;
 }
 
 thead th {
@@ -338,6 +373,41 @@ thead th {
   border-bottom: 1px solid #e2e8f0;
   font-weight: 700;
   color: #0f172a;
+}
+
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 26px;
+  transition: background 0.15s ease;
+}
+
+thead th.sortable::after {
+  content: '⇅';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #94a3b8;
+  opacity: 0.6;
+}
+
+thead th.sortable.sorted-asc::after {
+  content: '▲';
+  color: #0f172a;
+  opacity: 1;
+}
+
+thead th.sortable.sorted-desc::after {
+  content: '▼';
+  color: #0f172a;
+  opacity: 1;
+}
+
+thead th.sortable:hover {
+  background: #f1f5f9;
 }
 
 tbody td {
@@ -566,6 +636,40 @@ tbody tr.focused-lead {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.template-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.template-tab {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.template-tab:hover {
+  border-color: #0a66c2;
+  color: #0a66c2;
+}
+
+.template-tab.active {
+  background: #0a66c2;
+  color: #fff;
+  border-color: #0a66c2;
+  box-shadow: 0 6px 20px rgba(10, 102, 194, 0.12);
+}
+
+.template-hint {
+  font-size: 13px;
+  color: #475569;
 }
 
 .message-textarea {

@@ -8,9 +8,12 @@
   <body>
     <div class="page">
       <header class="topbar">
-        <div>
-          <div class="app-title">LeadTracker <sup class="reg-symbol">®</sup></div>
-          <div class="app-subtitle">Dashboard de suivi des leads LinkedIn</div>
+        <div class="brand">
+          <img src="icons/logo.svg" alt="LeadTracker" class="app-logo" />
+          <div>
+            <div class="app-title">LeadTracker <sup class="reg-symbol">®</sup></div>
+            <div class="app-subtitle">Dashboard de suivi des leads LinkedIn</div>
+          </div>
         </div>
         <div class="top-actions">
           <button id="btnMetrics" class="btn ghost">Metrics</button>
@@ -26,32 +29,72 @@
           <div class="card-title">Filtres</div>
           <div id="filterBadge" class="badge hidden">Filtre "À contacter maintenant" actif</div>
         </div>
-        <div class="filters">
-          <div class="filter">
+        <div class="filters pill-grid">
+          <div class="filter pill">
+            <label for="filterKeyword">Recherche globale</label>
+            <input type="text" id="filterKeyword" placeholder="Nom, headline, titre" />
+          </div>
+          <div class="filter pill">
             <label for="filterSearchTitle">Titre de recherche</label>
             <select id="filterSearchTitle">
               <option value="all">Tous les titres</option>
             </select>
           </div>
-          <div class="filter">
+          <div class="filter pill">
+            <label for="filterCompanySegment">Segment</label>
+            <select id="filterCompanySegment">
+              <option value="all">Tous</option>
+              <option value="Startup">Startup</option>
+              <option value="Scale-up">Scale-up</option>
+              <option value="PME">PME</option>
+              <option value="ETI">ETI</option>
+              <option value="Grand groupe">Grand groupe</option>
+            </select>
+          </div>
+          <div class="filter pill">
+            <label for="filterIndustry">Secteur</label>
+            <input type="text" id="filterIndustry" placeholder="ex: SaaS, Fintech, Data" />
+          </div>
+          <div class="filter pill">
+            <label for="filterEmpMin">Employés (min)</label>
+            <input type="number" id="filterEmpMin" min="0" placeholder="ex: 50" />
+          </div>
+          <div class="filter pill">
+            <label for="filterEmpMax">Employés (max)</label>
+            <input type="number" id="filterEmpMax" min="0" placeholder="ex: 500" />
+          </div>
+          <div class="filter pill">
+            <label for="filterGeo">Zone géographique</label>
+            <input type="text" id="filterGeo" placeholder="ex: Europe, Paris" />
+          </div>
+          <div class="filter pill">
+            <label for="filterDirection">Type</label>
+            <select id="filterDirection">
+              <option value="all">Tous</option>
+              <option value="outbound_pending">Demande envoyée</option>
+              <option value="outbound_accepted">Outbound (acceptée)</option>
+              <option value="inbound_accepted">Inbound (reçue)</option>
+            </select>
+          </div>
+          <div class="filter pill">
             <label for="filterDateFrom">Acceptation - du</label>
             <input type="date" id="filterDateFrom" />
           </div>
-          <div class="filter">
+          <div class="filter pill">
             <label for="filterDateTo">Acceptation - au</label>
             <input type="date" id="filterDateTo" />
           </div>
-          <div class="filter">
-            <label for="filterKeyword">Recherche (mot-clé)</label>
-            <input type="text" id="filterKeyword" placeholder="Nom, headline ou titre" />
-          </div>
-          <div class="filter toggle">
+          <div class="filter pill toggle">
             <label class="checkbox-label">
               <input type="checkbox" id="filterToContact" />
-              Afficher uniquement les leads à contacter maintenant (J+5)
+              À contacter J+5
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="filterTopLead" />
+              Top leads
             </label>
           </div>
-          <div class="filter">
+          <div class="filter pill actions">
             <label>&nbsp;</label>
             <button
               id="btnResetFilters"
@@ -144,6 +187,10 @@
                 <th data-col="name">Nom</th>
                 <th data-col="topLead">Top</th>
                 <th data-col="company">Entreprise</th>
+                <th data-col="companySegment">Segment</th>
+                <th data-col="employeeRange">Range employés</th>
+                <th data-col="companyIndustry">Secteur</th>
+                <th data-col="geo">Zone géographique</th>
                 <th data-col="searchTitle">Titre de recherche</th>
                 <th data-col="direction">Type</th>
                 <th data-col="requestDate">Demande</th>
@@ -196,6 +243,26 @@
                 <input type="text" id="detailSearchTitle" />
               </label>
               <label
+                >Entreprise
+                <input type="text" id="detailCompanyInput" placeholder="Entreprise" />
+              </label>
+              <label
+                >Segment
+                <input type="text" id="detailCompanySegment" placeholder="Startup, PME, Scale-up..." />
+              </label>
+              <label
+                >Range employés
+                <input type="text" id="detailEmployeeRange" placeholder="ex : 51-200" />
+              </label>
+              <label
+                >Secteur
+                <input type="text" id="detailCompanyIndustry" placeholder="ex : Insurance, Software" />
+              </label>
+              <label
+                >Zone géographique
+                <input type="text" id="detailGeo" placeholder="ex : Paris, Europe, US" />
+              </label>
+              <label
                 >Demande
                 <input type="date" id="detailRequestDate" />
               </label>
@@ -236,6 +303,15 @@
           <div class="card-header">
             <div class="card-title" id="messageTitle">Message suggéré</div>
           </div>
+          <div class="template-tabs" id="templateTabs" role="tablist">
+            <button class="template-tab active" type="button" data-template="intro">
+              Premier message
+            </button>
+            <button class="template-tab" type="button" data-template="followup">
+              Relance courte
+            </button>
+          </div>
+          <div class="template-hint" id="templateDescription"></div>
           <textarea id="suggested-message" rows="6" class="message-textarea"></textarea>
           <div class="message-actions">
             <button id="btnCopyMessage" class="btn primary" type="button">Copier le message</button>
@@ -247,6 +323,7 @@
 
     <script src="constants.js"></script>
     <script src="utils.js"></script>
+    <script src="supabaseSync.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

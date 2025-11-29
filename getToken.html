@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Obtenir le token Supabase - LeadTracker</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .card {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+      color: #333;
+    }
+    .token-box {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 20px 0;
+      word-break: break-all;
+      font-family: monospace;
+      font-size: 12px;
+      position: relative;
+    }
+    .token-box.hidden {
+      display: none;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px 10px 0;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .copy-btn {
+      background: #28a745;
+    }
+    .copy-btn:hover {
+      background: #218838;
+    }
+    .status {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .status.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    .instructions {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    code {
+      background: #f8f9fa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔑 Obtenir le token Supabase</h1>
+    
+    <div class="instructions">
+      <strong>Instructions :</strong>
+      <ol>
+        <li>Assurez-vous d'être connecté à Supabase via l'extension LeadTracker</li>
+        <li>Cliquez sur le bouton ci-dessous pour récupérer le token</li>
+        <li>Copiez le token et utilisez-le avec le script d'import</li>
+      </ol>
+    </div>
+
+    <button id="getTokenBtn">Récupérer le token</button>
+    <button id="copyTokenBtn" class="copy-btn" style="display: none;">Copier le token</button>
+
+    <div id="status"></div>
+
+    <div id="tokenBox" class="token-box hidden">
+      <div style="margin-bottom: 10px;"><strong>Token d'accès :</strong></div>
+      <div id="tokenValue"></div>
+    </div>
+
+    <div style="margin-top: 30px;">
+      <h3>Utilisation du token :</h3>
+      <p>Une fois le token copié, utilisez-le avec le script d'import :</p>
+      <code>node importBackup.js "linkedin-leads-backup-2025-11-28 (2).json" --token VOTRE_TOKEN</code>
+    </div>
+  </div>
+
+  <script>
+    const getTokenBtn = document.getElementById('getTokenBtn');
+    const copyTokenBtn = document.getElementById('copyTokenBtn');
+    const tokenBox = document.getElementById('tokenBox');
+    const tokenValue = document.getElementById('tokenValue');
+    const status = document.getElementById('status');
+
+    function showStatus(message, type = 'info') {
+      status.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    getTokenBtn.addEventListener('click', async () => {
+      getTokenBtn.disabled = true;
+      showStatus('Récupération du token...', 'info');
+
+      try {
+        // Accéder au storage de l'extension Chrome
+        const result = await chrome.storage.local.get(['supabaseAccessToken', 'supabaseUser']);
+        
+        if (!result.supabaseAccessToken) {
+          showStatus('❌ Aucun token trouvé. Connectez-vous d\'abord à Supabase via l\'extension.', 'error');
+          getTokenBtn.disabled = false;
+          return;
+        }
+
+        const token = result.supabaseAccessToken;
+        const user = result.supabaseUser;
+
+        tokenValue.textContent = token;
+        tokenBox.classList.remove('hidden');
+        copyTokenBtn.style.display = 'inline-block';
+        
+        showStatus(`✅ Token récupéré${user?.email ? ` pour ${user.email}` : ''}`, 'success');
+        getTokenBtn.disabled = false;
+      } catch (error) {
+        console.error('Erreur:', error);
+        showStatus('❌ Erreur lors de la récupération du token. Assurez-vous que cette page est ouverte dans le contexte de l\'extension.', 'error');
+        getTokenBtn.disabled = false;
+      }
+    });
+
+    copyTokenBtn.addEventListener('click', async () => {
+      const token = tokenValue.textContent;
+      try {
+        await navigator.clipboard.writeText(token);
+        showStatus('✅ Token copié dans le presse-papiers !', 'success');
+      } catch (error) {
+        // Fallback pour navigateurs plus anciens
+        const textarea = document.createElement('textarea');
+        textarea.value = token;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showStatus('✅ Token copié dans le presse-papiers !', 'success');
+      }
+    });
+  </script>
+</body>
+</html>

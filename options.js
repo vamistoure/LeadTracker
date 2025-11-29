@@ -22,11 +22,51 @@ let allTitles = [];
 let isLoading = true;
 let currentPage = 1;
 const PAGE_SIZE = 10;
+const DEFAULT_SORT_DIRECTION = {
+  name: 'asc',
+  topLead: 'desc',
+  company: 'asc',
+  companySegment: 'asc',
+  employeeRange: 'asc',
+  companyIndustry: 'asc',
+  geo: 'asc',
+  searchTitle: 'asc',
+  direction: 'asc',
+  requestDate: 'desc',
+  acceptanceDate: 'desc',
+  days: 'desc',
+  contacted: 'desc',
+  message: 'desc',
+  actions: 'desc',
+  createdAt: 'desc',
+  updatedAt: 'desc'
+};
 let currentSortColumn = 'createdAt';
-let currentSortDir = 'desc';
+let currentSortDir = DEFAULT_SORT_DIRECTION[currentSortColumn] || 'desc';
 const formatTitle = window?.formatTitle || ((label = '') => (label || '').trim().toUpperCase());
 const normalizeTitle =
   window?.normalizeTitle || ((label = '') => (label || '').trim().toUpperCase());
+const parseEmployeeRange =
+  window?.parseEmployeeRange ||
+  ((raw = '') => {
+    if (!raw || typeof raw !== 'string') return null;
+    const text = raw.replace(/\u202f/g, ' ').replace(/\u00a0/g, ' ').trim();
+    if (!text) return null;
+    const num = parseInt(text.replace(/[^\d]/g, ''), 10);
+    if (Number.isFinite(num)) return { min: num, max: num, raw: text };
+    return null;
+  });
+const computeCompanySegment =
+  window?.computeCompanySegment ||
+  ((range) => {
+    if (!range || (!range.min && !range.max)) return null;
+    const point = range.max || range.min || 0;
+    if (point <= 10) return 'Startup';
+    if (point <= 50) return 'Scale-up';
+    if (point <= 250) return 'PME';
+    if (point <= 1000) return 'ETI';
+    return 'Grand groupe';
+  });
 const deriveCompanyFromHeadline =
   window?.deriveCompanyFromHeadline ||
   ((headline = '') => {
@@ -51,6 +91,8 @@ const deriveCompanyFromHeadline =
 const storageGetSafe = window?.storageGet || ((keys) => chrome.storage.local.get(keys));
 const storageSetSafe = window?.storageSet || ((obj) => chrome.storage.local.set(obj));
 let lastSuggestedLead = null;
+const DEFAULT_TEMPLATE_ID = 'intro';
+let selectedTemplateId = DEFAULT_TEMPLATE_ID;
 let focusLeadId = null;
 let focusLeadProfileUrl = null;
 let hasAppliedFocusFilters = false;
@@ -61,6 +103,10 @@ const COLUMN_DEFS = [
   { key: 'name', label: 'Nom' },
   { key: 'topLead', label: 'Top' },
   { key: 'company', label: 'Entreprise' },
+  { key: 'companySegment', label: 'Segment' },
+  { key: 'employeeRange', label: 'Range employés' },
+  { key: 'companyIndustry', label: 'Secteur' },
+  { key: 'geo', label: 'Zone géographique' },
   { key: 'searchTitle', label: 'Titre de recherche' },
   { key: 'direction', label: 'Type' },
   { key: 'requestDate', label: 'Demande' },
@@ -71,6 +117,75 @@ const COLUMN_DEFS = [
   { key: 'actions', label: 'Actions' }
 ];
 let columnVisibility = getDefaultColumnVisibility();
+
+function isTopLeadByRules(lead) {
+  const headlineUpper = (lead.headline || '').toUpperCase();
+  const titleUpper = (lead.searchTitle || '').toUpperCase();
+  const companySegment = (lead.companySegment || '').toUpperCase();
+  const range = parseEmployeeRange(lead.employeeRange || '');
+  const maxEmp = range?.max || range?.min || null;
+  const tags = Array.isArray(lead.tags)
+    ? lead.tags.map((t) => t.toUpperCase())
+    : (lead.tags || '').toUpperCase();
+  const industryUpper = (lead.companyIndustry || '').toUpperCase();
+
+  // Règle 1: CEO/CTO et moins de 500 employés
+  if (
+    (headlineUpper.includes('CEO') || headlineUpper.includes('CTO')) &&
+    maxEmp !== null &&
+    maxEmp < 500
+  ) {
+    return true;
+  }
+
+  // Règle 2: Head/VP/Data Director dans une scale-up / PME (50-500)
+  const dataTitles = ['HEAD OF DATA', 'VP DATA', 'DATA DIRECTOR', 'CHIEF DATA', 'CDO'];
+  const matchDataTitle = dataTitles.some(
+    (t) => headlineUpper.includes(t) || titleUpper.includes(t)
+  );
+  if (
+    matchDataTitle &&
+    ((companySegment === 'SCALE-UP' || companySegment === 'PME') ||
+      (maxEmp !== null && maxEmp >= 50 && maxEmp <= 500))
+  ) {
+    return true;
+  }
+
+  // Règle 3: Non contacté, accepté récemment (<=3 jours) et persona data/lead
+  if (!lead.contacted && lead.acceptanceDate) {
+    const days = getDaysDiff(lead.acceptanceDate);
+    if (Number.isFinite(days) && days <= 3 && (matchDataTitle || headlineUpper.includes('LEAD')))
+      return true;
+  }
+
+  // Règle 4: Non contacté, accepté récemment (<=7 jours)
+  if (!lead.contacted && lead.acceptanceDate) {
+    const daysSince = getDaysDiff(lead.acceptanceDate);
+    if (Number.isFinite(daysSince) && daysSince <= 7) return true;
+  }
+
+  // Règle 5: Dormant >30 jours et jamais contacté
+  if (!lead.contacted && lead.acceptanceDate) {
+    const daysSince = getDaysDiff(lead.acceptanceDate);
+    if (Number.isFinite(daysSince) && daysSince > 30) return true;
+  }
+
+  // Règle 6: Secteur cible + taille 50-500
+  if (
+    maxEmp !== null &&
+    maxEmp >= 50 &&
+    maxEmp <= 500 &&
+    (industryUpper.includes('SAAS') || industryUpper.includes('FINTECH') || industryUpper.includes('DATA'))
+  ) {
+    return true;
+  }
+
+  // Règle 7: Tag prioritaire
+  if (tags && typeof tags === 'string' && tags.includes('PRIORITAIRE')) return true;
+  if (Array.isArray(tags) && tags.some((t) => t.includes('PRIORITAIRE'))) return true;
+
+  return false;
+}
 
 function harmonizeLeads() {
   return new Promise((resolve) => {
@@ -86,6 +201,10 @@ function harmonizeLeads() {
 document.addEventListener('DOMContentLoaded', async () => {
   await harmonizeLeads();
   await loadData();
+  await loadSupabaseSession();
+  
+  // Exposer la fonction d'import dans la console pour usage manuel
+  window.importBackupToSupabase = importBackupToSupabase;
   initFiltersFromUrl();
   renderFilters();
   applyFocusLeadFilters();
@@ -146,7 +265,11 @@ function setFeedback(message, type = 'info') {
 async function loadData() {
   try {
     const data = await storageGetSafe(['leads', 'searchTitles', 'columnVisibility']);
-    allLeads = data.leads || [];
+    allLeads = (data.leads || []).map((l) => {
+      if (l.topLead) return l;
+      const autoTop = isTopLeadByRules(l);
+      return autoTop ? { ...l, topLead: true, updatedAt: Date.now() } : l;
+    });
     allTitles = data.searchTitles || [];
     columnVisibility = {
       ...getDefaultColumnVisibility(),
@@ -235,6 +358,130 @@ function applyFocusLeadFilters() {
   });
 }
 
+async function loadSupabaseSession() {
+  try {
+    const { supabaseAccessToken, supabaseUser, supabaseLastSync } = await storageGetSafe([
+      'supabaseAccessToken',
+      'supabaseUser',
+      'supabaseLastSync'
+    ]);
+    if (supabaseUser) {
+      const status = document.getElementById('supaStatus');
+      if (status) {
+        status.classList.remove('hidden', 'error', 'success');
+        status.classList.add('info');
+        status.textContent = `Connecté en tant que ${supabaseUser.email || 'user'}${
+          supabaseLastSync ? ` • Dernière sync: ${new Date(supabaseLastSync).toLocaleString()}` : ''
+        }`;
+      }
+    }
+    return { supabaseAccessToken, supabaseUser };
+  } catch (e) {
+    console.warn('Supabase session load failed:', e);
+    return {};
+  }
+}
+
+function setSupaStatus(message, type = 'info') {
+  const status = document.getElementById('supaStatus');
+  if (!status) return;
+  status.classList.remove('hidden', 'error', 'info', 'success');
+  status.classList.add(type);
+  status.textContent = message;
+}
+
+// Fonction utilitaire pour vérifier si Supabase est configuré
+async function isSupabaseConfigured() {
+  try {
+    const data = await storageGetSafe(['supabaseAccessToken', 'supabaseMode']);
+    // Si le mode local est activé, Supabase n'est pas utilisé
+    if (data?.supabaseMode === 'local') {
+      return false;
+    }
+    return !!(data?.supabaseAccessToken && typeof data.supabaseAccessToken === 'string');
+  } catch (e) {
+    return false;
+  }
+}
+
+// Fonction utilitaire pour pousser automatiquement les leads vers Supabase
+async function pushLeadToSupabase(lead) {
+  if (!lead) return;
+  
+  // Vérifier si Supabase est configuré avant de continuer
+  const isConfigured = await isSupabaseConfigured();
+  if (!isConfigured) {
+    // Mode local : pas de synchronisation, fonctionnement normal
+    return;
+  }
+  
+  try {
+    // Vérifier si Supabase est disponible
+    if (!window?.supabaseSync || !window.supabaseSync.pushChanges) {
+      console.warn('[LeadTracker] Supabase sync non disponible');
+      return;
+    }
+    
+    // Vérifier si l'utilisateur est connecté à Supabase
+    const { supabaseAccessToken } = await storageGetSafe(['supabaseAccessToken']);
+    if (!supabaseAccessToken) {
+      return;
+    }
+    
+    // Pousser le lead vers Supabase
+    await window.supabaseSync.pushChanges(supabaseAccessToken, { 
+      leads: [lead], 
+      searchTitles: [] 
+    });
+    
+    // Mettre à jour la dernière sync
+    await storageSetSafe({
+      supabaseLastSync: new Date().toISOString()
+    });
+    
+    console.log('[LeadTracker] Lead synchronisé avec Supabase:', lead.id || lead.profileUrl);
+  } catch (e) {
+    // Erreur silencieuse - ne pas perturber l'utilisateur
+    console.warn('[LeadTracker] Erreur synchronisation Supabase:', e.message);
+  }
+}
+
+// Fonction pour pousser plusieurs leads vers Supabase
+async function pushLeadsToSupabase(leads) {
+  if (!leads || !leads.length) return;
+  
+  // Vérifier si Supabase est configuré avant de continuer
+  const isConfigured = await isSupabaseConfigured();
+  if (!isConfigured) {
+    // Mode local : pas de synchronisation, fonctionnement normal
+    return;
+  }
+  
+  try {
+    if (!window?.supabaseSync || !window.supabaseSync.pushChanges) {
+      return;
+    }
+    
+    const { supabaseAccessToken } = await storageGetSafe(['supabaseAccessToken']);
+    if (!supabaseAccessToken) {
+      return;
+    }
+    
+    await window.supabaseSync.pushChanges(supabaseAccessToken, { 
+      leads, 
+      searchTitles: [] 
+    });
+    
+    await storageSetSafe({
+      supabaseLastSync: new Date().toISOString()
+    });
+    
+    console.log(`[LeadTracker] ${leads.length} leads synchronisés avec Supabase`);
+  } catch (e) {
+    console.warn('[LeadTracker] Erreur synchronisation Supabase:', e.message);
+  }
+}
+
 function renderFilters() {
   const select = document.getElementById('filterSearchTitle');
   if (!select) return;
@@ -281,11 +528,18 @@ function renderFilters() {
 }
 
 function getFilteredLeads() {
-  const searchTitle = document.getElementById('filterSearchTitle').value;
-  const dateFrom = document.getElementById('filterDateFrom').value;
-  const dateTo = document.getElementById('filterDateTo').value;
-  const onlyToContact = document.getElementById('filterToContact').checked;
-  const keyword = (document.getElementById('filterKeyword').value || '').toLowerCase().trim();
+  const searchTitle = document.getElementById('filterSearchTitle')?.value || 'all';
+  const dateFrom = document.getElementById('filterDateFrom')?.value || '';
+  const dateTo = document.getElementById('filterDateTo')?.value || '';
+  const onlyToContact = !!document.getElementById('filterToContact')?.checked;
+  const keyword = (document.getElementById('filterKeyword')?.value || '').toLowerCase().trim();
+  const segmentFilter = document.getElementById('filterCompanySegment')?.value || 'all';
+  const industryFilter = (document.getElementById('filterIndustry')?.value || '').toLowerCase().trim();
+  const empMin = parseInt(document.getElementById('filterEmpMin')?.value, 10);
+  const empMax = parseInt(document.getElementById('filterEmpMax')?.value, 10);
+  const directionFilter = document.getElementById('filterDirection')?.value || 'all';
+  const onlyTopLead = !!document.getElementById('filterTopLead')?.checked;
+  const geoFilter = (document.getElementById('filterGeo')?.value || '').toLowerCase().trim();
 
   toggleFilterBadge(onlyToContact);
 
@@ -317,8 +571,156 @@ function getFilteredLeads() {
       if (!haystack.includes(keyword)) return false;
     }
 
+    if (onlyTopLead && !lead.topLead) return false;
+
+    if (segmentFilter !== 'all') {
+      const derivedSegment =
+        lead.companySegment ||
+        computeCompanySegment(parseEmployeeRange(lead.employeeRange || '') || null) ||
+        '';
+      if ((derivedSegment || '').toLowerCase() !== segmentFilter.toLowerCase()) return false;
+    }
+
+    if (industryFilter) {
+      const industry = (lead.companyIndustry || '').toLowerCase();
+      if (!industry.includes(industryFilter)) return false;
+    }
+
+    if (geoFilter) {
+      const geo = (lead.geo || '').toLowerCase();
+      if (!geo.includes(geoFilter)) return false;
+    }
+
+    if (Number.isFinite(empMin) || Number.isFinite(empMax)) {
+      const parsedRange = parseEmployeeRange(lead.employeeRange || '');
+      if (!parsedRange) return false;
+      if (Number.isFinite(empMin) && parsedRange.max !== null && parsedRange.max < empMin)
+        return false;
+      if (Number.isFinite(empMax) && parsedRange.min !== null && parsedRange.min > empMax)
+        return false;
+    }
+
+    if (directionFilter !== 'all' && lead.direction !== directionFilter) return false;
+
     return true;
   });
+}
+
+function getSortValue(lead, column) {
+  switch (column) {
+    case 'name':
+      return (lead.name || '').toLowerCase();
+    case 'company':
+      return (lead.company || deriveCompanyFromHeadline(lead.headline) || '').toLowerCase();
+    case 'companySegment':
+      return (lead.companySegment || '').toLowerCase();
+    case 'employeeRange':
+      return (lead.employeeRange || '').toLowerCase();
+    case 'companyIndustry':
+      return (lead.companyIndustry || '').toLowerCase();
+    case 'geo':
+      return (lead.geo || '').toLowerCase();
+    case 'searchTitle':
+      return normalizeTitle(lead.searchTitle || '');
+    case 'direction':
+      return formatDirection(lead).toLowerCase();
+    case 'requestDate': {
+      if (!lead.requestDate) return null;
+      const ts = new Date(lead.requestDate).getTime();
+      return Number.isFinite(ts) ? ts : null;
+    }
+    case 'acceptanceDate': {
+      if (!lead.acceptanceDate) return null;
+      const ts = new Date(lead.acceptanceDate).getTime();
+      return Number.isFinite(ts) ? ts : null;
+    }
+    case 'days': {
+      if (!lead.acceptanceDate) return null;
+      const diff = getDaysDiff(lead.acceptanceDate);
+      return Number.isFinite(diff) ? diff : null;
+    }
+    case 'contacted':
+      return lead.contacted ? 1 : 0;
+    case 'topLead':
+      return lead.topLead ? 1 : 0;
+    case 'message':
+    case 'actions':
+      return getLeadTimestamp(lead);
+    default:
+      return getLeadTimestamp(lead);
+  }
+}
+
+function compareLeads(a, b) {
+  const valA = getSortValue(a, currentSortColumn);
+  const valB = getSortValue(b, currentSortColumn);
+  const missingA = valA === null || valA === undefined || valA === '';
+  const missingB = valB === null || valB === undefined || valB === '';
+
+  if (missingA && !missingB) return 1;
+  if (!missingA && missingB) return -1;
+
+  const dir = currentSortDir === 'asc' ? 1 : -1;
+
+  if (typeof valA === 'string' || typeof valB === 'string') {
+    const aStr = (valA || '').toString();
+    const bStr = (valB || '').toString();
+    const cmp = aStr.localeCompare(bStr, 'fr', { sensitivity: 'base' });
+    if (cmp !== 0) return cmp * dir;
+  } else if (typeof valA === 'number' && typeof valB === 'number') {
+    if (valA !== valB) return (valA - valB) * dir;
+  }
+
+  const fallback = getLeadTimestamp(b) - getLeadTimestamp(a);
+  if (fallback !== 0) return fallback;
+  return 0;
+}
+
+function updateSortIndicators() {
+  const headers = document.querySelectorAll('#leadsTable thead th');
+  if (!headers || !headers.length) return;
+  headers.forEach((th) => {
+    const col = th.dataset.col;
+    th.classList.remove('sorted-asc', 'sorted-desc');
+    if (col === currentSortColumn) {
+      th.classList.add(currentSortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+      th.setAttribute('aria-sort', currentSortDir === 'asc' ? 'ascending' : 'descending');
+    } else {
+      th.setAttribute('aria-sort', 'none');
+    }
+  });
+}
+
+function applySort(columnKey) {
+  if (!columnKey) return;
+  if (currentSortColumn === columnKey) {
+    currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    currentSortColumn = columnKey;
+    currentSortDir = DEFAULT_SORT_DIRECTION[columnKey] || 'asc';
+  }
+  currentPage = 1;
+  renderTable();
+}
+
+function setupSorting() {
+  const headers = document.querySelectorAll('#leadsTable thead th');
+  if (!headers || !headers.length) return;
+  headers.forEach((th) => {
+    const col = th.dataset.col;
+    if (!col) return;
+    th.classList.add('sortable');
+    th.setAttribute('role', 'button');
+    th.setAttribute('tabindex', '0');
+    th.addEventListener('click', () => applySort(col));
+    th.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        applySort(col);
+      }
+    });
+  });
+  updateSortIndicators();
 }
 
 function renderTable() {
@@ -329,6 +731,8 @@ function renderTable() {
   const loadingState = document.getElementById('loadingState');
   const pagination = document.getElementById('pagination');
   const pageInfo = document.getElementById('pageInfo');
+
+  updateSortIndicators();
 
   if (!hasAppliedFocusFilters && (focusLeadId || focusLeadProfileUrl)) {
     applyFocusLeadFilters();
@@ -370,7 +774,7 @@ function renderTable() {
 
   tbody.innerHTML = '';
 
-  filtered.sort((a, b) => getLeadTimestamp(b) - getLeadTimestamp(a));
+  filtered.sort(compareLeads);
 
   if (focusedLead) {
     const focusIndex = filtered.findIndex((l) => l.id === focusedLead.id);
@@ -426,6 +830,10 @@ function renderTable() {
         </button>
       </td>
       <td data-col="company">${companyValue}</td>
+      <td data-col="companySegment">${lead.companySegment || ''}</td>
+      <td data-col="employeeRange">${lead.employeeRange || ''}</td>
+      <td data-col="companyIndustry">${lead.companyIndustry || ''}</td>
+      <td data-col="geo">${lead.geo || ''}</td>
       <td data-col="searchTitle">${formatTitle(lead.searchTitle)}</td>
       <td data-col="direction">
         <span class="type-icon" title="${statusText}" aria-label="${statusText}">${statusIcon.icon}</span>
@@ -551,6 +959,9 @@ async function handleContactChange(e) {
     allLeads[index].updatedAt = Date.now();
 
     await chrome.storage.local.set({ leads: allLeads });
+    
+    // Synchroniser automatiquement avec Supabase
+    await pushLeadToSupabase(allLeads[index]);
   }
 }
 
@@ -560,6 +971,10 @@ async function toggleTopLead(id) {
   allLeads[index].topLead = !allLeads[index].topLead;
   allLeads[index].updatedAt = Date.now();
   await chrome.storage.local.set({ leads: allLeads });
+  
+  // Synchroniser automatiquement avec Supabase
+  await pushLeadToSupabase(allLeads[index]);
+  
   renderTable();
   renderFilters();
 }
@@ -577,6 +992,10 @@ async function handleAcceptLead(e) {
   lead.updatedAt = Date.now();
 
   await chrome.storage.local.set({ leads: allLeads });
+  
+  // Synchroniser automatiquement avec Supabase
+  await pushLeadToSupabase(lead);
+  
   renderTable();
   renderFilters();
 }
@@ -606,8 +1025,27 @@ function setupEventListeners() {
       window.location.href = 'metrics.html';
     });
   }
-  ['filterSearchTitle', 'filterDateFrom', 'filterDateTo', 'filterToContact'].forEach((id) => {
-    document.getElementById(id).addEventListener('change', () => {
+  const btnSupaLogin = document.getElementById('btnSupaLogin');
+  if (btnSupaLogin) {
+    btnSupaLogin.addEventListener('click', handleSupabaseLogin);
+  }
+  const btnSupaSync = document.getElementById('btnSupaSync');
+  if (btnSupaSync) {
+    btnSupaSync.addEventListener('click', handleSupabaseSync);
+  }
+  setupSorting();
+  [
+    'filterSearchTitle',
+    'filterDateFrom',
+    'filterDateTo',
+    'filterToContact',
+    'filterCompanySegment',
+    'filterDirection',
+    'filterTopLead'
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', () => {
       currentPage = 1;
       renderTable();
     });
@@ -616,7 +1054,10 @@ function setupEventListeners() {
     currentPage = 1;
     renderTable();
   });
-  document.getElementById('filterKeyword').addEventListener('input', debouncedFilter);
+  ['filterKeyword', 'filterIndustry', 'filterEmpMin', 'filterEmpMax'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', debouncedFilter);
+  });
 
   const appTitle = document.querySelector('.app-title');
   if (appTitle) {
@@ -631,7 +1072,13 @@ function setupEventListeners() {
       ['filterSearchTitle', 'all'],
       ['filterDateFrom', ''],
       ['filterDateTo', ''],
-      ['filterKeyword', '']
+      ['filterKeyword', ''],
+      ['filterCompanySegment', 'all'],
+      ['filterIndustry', ''],
+      ['filterEmpMin', ''],
+      ['filterEmpMax', ''],
+      ['filterGeo', ''],
+      ['filterDirection', 'all']
     ];
 
     valueTargets.forEach(([id, value]) => {
@@ -641,6 +1088,8 @@ function setupEventListeners() {
 
     const toContact = document.getElementById('filterToContact');
     if (toContact) toContact.checked = false;
+    const topLead = document.getElementById('filterTopLead');
+    if (topLead) topLead.checked = false;
 
     currentPage = 1;
     renderTable();
@@ -811,6 +1260,14 @@ function setupEventListeners() {
               return csvEscape(l.topLead ? 'Oui' : 'Non');
             case 'company':
               return csvEscape(exportCompany);
+            case 'companySegment':
+              return csvEscape(l.companySegment || '');
+            case 'employeeRange':
+              return csvEscape(l.employeeRange || '');
+            case 'companyIndustry':
+              return csvEscape(l.companyIndustry || '');
+            case 'geo':
+              return csvEscape(l.geo || '');
             case 'searchTitle':
               return csvEscape(formatTitle(l.searchTitle || ''));
             case 'direction':
@@ -868,6 +1325,19 @@ function setupEventListeners() {
       feedback.textContent = 'Impossible de copier le message.';
     }
   });
+
+  const templateTabs = document.getElementById('templateTabs');
+  if (templateTabs) {
+    templateTabs.addEventListener('click', (e) => {
+      const tab = e.target.closest('.template-tab');
+      if (!tab || !tab.dataset.template) return;
+      selectedTemplateId = tab.dataset.template;
+      renderTemplateTabs();
+      if (lastSuggestedLead) {
+        renderSuggestedMessage(lastSuggestedLead);
+      }
+    });
+  }
 }
 
 function extractFirstName(name) {
@@ -896,9 +1366,20 @@ function openLeadDetail(lead) {
   const feedback = document.getElementById('detailFeedback');
   if (!modal) return;
   const derivedCompany = deriveCompanyFromHeadline(lead.headline);
+  const companyValue = lead.company || derivedCompany || '';
   document.getElementById('detailName').textContent = lead.name || 'Inconnu';
   document.getElementById('detailHeadline').textContent = lead.headline || '';
-  document.getElementById('detailCompany').textContent = lead.company || derivedCompany || '';
+  document.getElementById('detailCompany').textContent = companyValue;
+  const companyInput = document.getElementById('detailCompanyInput');
+  if (companyInput) companyInput.value = companyValue;
+  const segmentInput = document.getElementById('detailCompanySegment');
+  if (segmentInput) segmentInput.value = lead.companySegment || '';
+  const rangeInput = document.getElementById('detailEmployeeRange');
+  if (rangeInput) rangeInput.value = lead.employeeRange || '';
+  const industryInput = document.getElementById('detailCompanyIndustry');
+  if (industryInput) industryInput.value = lead.companyIndustry || '';
+  const geoInput = document.getElementById('detailGeo');
+  if (geoInput) geoInput.value = lead.geo || '';
   document.getElementById('detailStatus').value = lead.status || '';
   document.getElementById('detailTags').value = Array.isArray(lead.tags)
     ? lead.tags.join(', ')
@@ -931,6 +1412,14 @@ async function saveLeadDetail() {
         .value.split(',')
         .map((t) => t.trim())
         .filter(Boolean),
+      company:
+        document.getElementById('detailCompanyInput')?.value.trim() ||
+        leads[idx].company ||
+        '',
+      companySegment: document.getElementById('detailCompanySegment')?.value.trim() || '',
+      employeeRange: document.getElementById('detailEmployeeRange')?.value.trim() || '',
+      companyIndustry: document.getElementById('detailCompanyIndustry')?.value.trim() || '',
+      geo: document.getElementById('detailGeo')?.value.trim() || '',
       direction: document.getElementById('detailDirection').value,
       searchTitle:
         document.getElementById('detailSearchTitle').value.trim() || leads[idx].searchTitle,
@@ -945,6 +1434,20 @@ async function saveLeadDetail() {
     leads[idx] = updated;
     leads[idx].updatedAt = Date.now();
     await chrome.storage.local.set({ leads });
+    
+    // Synchroniser automatiquement avec Supabase
+    await pushLeadToSupabase(leads[idx]);
+    
+    const headerCompany = document.getElementById('detailCompany');
+    if (headerCompany) headerCompany.textContent = updated.company || '';
+    const segmentInput = document.getElementById('detailCompanySegment');
+    if (segmentInput) segmentInput.value = updated.companySegment || '';
+    const rangeInput = document.getElementById('detailEmployeeRange');
+    if (rangeInput) rangeInput.value = updated.employeeRange || '';
+    const industryInput = document.getElementById('detailCompanyIndustry');
+    if (industryInput) industryInput.value = updated.companyIndustry || '';
+    const geoInput = document.getElementById('detailGeo');
+    if (geoInput) geoInput.value = updated.geo || '';
     setFeedback('Lead mis à jour.', 'success');
     feedback.classList.remove('hidden', 'error');
     feedback.classList.add('success');
@@ -1041,7 +1544,7 @@ function nextWorkingDaySlots() {
   return [{ label: formatSlot(first, 12, 0) }, { label: formatSlot(second, 15, 0) }];
 }
 
-function buildSuggestedMessage(lead) {
+function buildIntroMessage(lead) {
   const firstName = extractFirstName(lead.name) || 'là';
   const role = extractRoleFromHeadline(lead.headline);
   const isInbound = lead.direction === 'inbound_accepted';
@@ -1072,18 +1575,224 @@ function buildSuggestedMessage(lead) {
   return lines.join('\n');
 }
 
+function buildFollowUpMessage(lead) {
+  const firstName = extractFirstName(lead.name) || 'là';
+  const role = extractRoleFromHeadline(lead.headline);
+  const slots = nextWorkingDaySlots();
+  const days = lead.acceptanceDate ? getDaysDiff(lead.acceptanceDate) : null;
+  const daySuffix = days !== null ? ` (J+${days})` : '';
+
+  const lines = [];
+  lines.push(`Hello ${firstName},`);
+  lines.push(`Je me permets une courte relance${daySuffix} suite à notre connexion.`);
+  if (role) {
+    lines.push(`En tant que ${role}, je pense qu'un échange rapide serait utile des deux côtés.`);
+  } else {
+    lines.push("Je pense qu'on peut peut-être s'apporter mutuellement en quelques minutes.");
+  }
+  lines.push(
+    "Toujours partant(e) pour 15 min ? Je peux te proposer deux créneaux et m'adapter si besoin."
+  );
+  if (slots && slots.length === 2) {
+    lines.push(`Par exemple ${slots[0].label} ou ${slots[1].label}.`);
+  }
+  lines.push("Sinon, n'hésite pas à me dire quand c'est mieux pour toi.");
+
+  return lines.join('\n');
+}
+
+const MESSAGE_TEMPLATES = [
+  {
+    id: 'intro',
+    label: 'Premier message',
+    description: 'Remercier pour la connexion et proposer un échange de 15 min.',
+    build: buildIntroMessage
+  },
+  {
+    id: 'followup',
+    label: 'Relance courte',
+    description: 'Relancer un lead sans réponse en proposant 2 créneaux précis.',
+    build: buildFollowUpMessage
+  }
+];
+
+function getTemplateById(id) {
+  const found = MESSAGE_TEMPLATES.find((tpl) => tpl.id === id);
+  if (found) return found;
+  selectedTemplateId = MESSAGE_TEMPLATES[0].id;
+  return MESSAGE_TEMPLATES[0];
+}
+
+function renderTemplateTabs() {
+  const tabs = document.querySelectorAll('#templateTabs .template-tab');
+  const current = getTemplateById(selectedTemplateId);
+  tabs.forEach((btn) => {
+    const isActive = btn.dataset.template === current.id;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+  const hint = document.getElementById('templateDescription');
+  if (hint) {
+    hint.textContent = current.description || '';
+  }
+}
+
+function renderSuggestedMessage(lead) {
+  const textarea = document.getElementById('suggested-message');
+  const title = document.getElementById('messageTitle');
+  const template = getTemplateById(selectedTemplateId);
+  if (title && template) {
+    title.textContent = `${template.label} pour ${lead.name || 'ce lead'}`;
+  }
+  if (textarea && template) {
+    textarea.value = template.build(lead);
+  }
+}
+
 function showSuggestedMessage(lead) {
   if (!lead) return;
   const section = document.getElementById('messageSection');
-  const title = document.getElementById('messageTitle');
-  const textarea = document.getElementById('suggested-message');
   const feedback = document.getElementById('messageFeedback');
-  if (!section || !title || !textarea || !feedback) return;
+  if (!section || !feedback) return;
 
-  title.textContent = `Message suggéré pour ${lead.name || 'ce lead'}`;
-  textarea.value = buildSuggestedMessage(lead);
+  lastSuggestedLead = lead;
+  renderTemplateTabs();
+  renderSuggestedMessage(lead);
   feedback.classList.add('hidden');
   section.classList.remove('hidden');
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  lastSuggestedLead = lead;
+}
+
+async function handleSupabaseLogin() {
+  const email = document.getElementById('supaEmail')?.value.trim();
+  const password = document.getElementById('supaPassword')?.value;
+  if (!email || !password) {
+    setSupaStatus('Email et mot de passe requis.', 'error');
+    return;
+  }
+  if (!window?.supabaseSync || !window.supabaseSync.signInWithPassword) {
+    setSupaStatus('Supabase non disponible dans cette page.', 'error');
+    return;
+  }
+  setSupaStatus('Connexion en cours...', 'info');
+  try {
+    const res = await window.supabaseSync.signInWithPassword(email, password);
+    const accessToken = res?.access_token;
+    if (!accessToken) throw new Error('Token absent');
+    await storageSetSafe({
+      supabaseAccessToken: accessToken,
+      supabaseUser: { email },
+      supabaseLastSync: null
+    });
+    setSupaStatus(`Connecté en tant que ${email}.`, 'success');
+  } catch (e) {
+    console.error('Supabase login failed:', e);
+    setSupaStatus('Connexion Supabase échouée. Vérifiez vos identifiants.', 'error');
+  } finally {
+    const pwd = document.getElementById('supaPassword');
+    if (pwd) pwd.value = '';
+  }
+}
+
+async function handleSupabaseSync() {
+  if (!window?.supabaseSync || !window.supabaseSync.syncAll) {
+    setSupaStatus('Supabase non disponible dans cette page.', 'error');
+    return;
+  }
+  const { supabaseAccessToken } = await storageGetSafe(['supabaseAccessToken']);
+  if (!supabaseAccessToken) {
+    setSupaStatus('Connectez-vous à Supabase avant de synchroniser.', 'error');
+    return;
+  }
+  setSupaStatus('Synchronisation en cours...', 'info');
+  try {
+    const data = await storageGetSafe(['leads', 'searchTitles', 'supabaseLastSync']);
+    const localLeads = data.leads || [];
+    const localTitles = data.searchTitles || [];
+    const since = data.supabaseLastSync || null;
+    const { mergedLeads, mergedTitles } = await window.supabaseSync.syncAll(supabaseAccessToken, {
+      localLeads,
+      localTitles,
+      since
+    });
+    await storageSetSafe({
+      leads: mergedLeads,
+      searchTitles: mergedTitles,
+      supabaseLastSync: new Date().toISOString()
+    });
+    allLeads = mergedLeads;
+    allTitles = mergedTitles;
+    renderFilters();
+    renderTable();
+    setSupaStatus('Synchronisation terminée.', 'success');
+  } catch (e) {
+    console.error('Supabase sync failed:', e);
+    setSupaStatus('Sync Supabase échouée. Réessayez.', 'error');
+  }
+}
+
+async function importBackupToSupabase(backupData) {
+  if (!window?.supabaseSync || !window.supabaseSync.pushChanges) {
+    setSupaStatus('Supabase non disponible dans cette page.', 'error');
+    return;
+  }
+  const { supabaseAccessToken } = await storageGetSafe(['supabaseAccessToken']);
+  if (!supabaseAccessToken) {
+    setSupaStatus('Connectez-vous à Supabase avant d\'importer.', 'error');
+    return;
+  }
+
+  try {
+    let leads = [];
+    let searchTitles = [];
+
+    // Si backupData est une string, la parser
+    if (typeof backupData === 'string') {
+      backupData = JSON.parse(backupData);
+    }
+
+    // Extraire les leads et searchTitles du backup
+    if (backupData.leads && Array.isArray(backupData.leads)) {
+      leads = backupData.leads;
+    }
+    if (backupData.searchTitles && Array.isArray(backupData.searchTitles)) {
+      searchTitles = backupData.searchTitles;
+    }
+
+    if (!leads.length && !searchTitles.length) {
+      setSupaStatus('Aucune donnée à importer dans le backup.', 'error');
+      return;
+    }
+
+    setSupaStatus(`Import en cours: ${leads.length} leads, ${searchTitles.length} titres...`, 'info');
+
+    // Pousser les données vers Supabase
+    const result = await window.supabaseSync.pushChanges(supabaseAccessToken, {
+      leads,
+      searchTitles
+    });
+
+    // Mettre à jour la dernière sync
+    await storageSetSafe({
+      supabaseLastSync: new Date().toISOString()
+    });
+
+    setSupaStatus(
+      `Import réussi: ${result.leads?.length || 0} leads et ${result.searchTitles?.length || 0} titres synchronisés.`,
+      'success'
+    );
+
+    // Recharger les données locales si nécessaire
+    if (leads.length) {
+      const currentData = await storageGetSafe(['leads']);
+      const currentLeads = currentData.leads || [];
+      const mergedLeads = window.supabaseSync.mergeById(currentLeads, leads);
+      await storageSetSafe({ leads: mergedLeads });
+      allLeads = mergedLeads;
+      renderTable();
+    }
+  } catch (e) {
+    console.error('Import backup Supabase failed:', e);
+    setSupaStatus(`Erreur lors de l'import: ${e.message}`, 'error');
+  }
 }

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>LeadTracker - Onboarding</title>
+    <link rel="stylesheet" href="onboarding.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <div class="brand">
+          <img src="icons/logo.svg" alt="LeadTracker" class="logo" />
+          <div>
+            <div class="title">LeadTracker</div>
+            <div class="subtitle">Capture et suivi de leads LinkedIn</div>
+          </div>
+        </div>
+        <div class="progress">
+          <div id="progressText">Étape 1 sur 5</div>
+          <div class="progress-bar">
+            <div id="progressFill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card flow">
+        <!-- Step 1: Welcome -->
+        <div class="step-card" data-step="welcome">
+          <h1>Gagne du temps sur LinkedIn en suivant tes leads sans CRM.</h1>
+          <p class="pitch">
+            En un clic, enregistre les profils et opportunités LinkedIn, puis retrouve-les dans LeadTracker.
+          </p>
+          <div class="hero-illustration">
+            <div class="mock">Mockup LinkedIn + bouton "Save lead"</div>
+          </div>
+          <div class="action-row">
+            <button id="btnStart" class="btn primary">Configurer LeadTracker</button>
+            <button id="btnDemo" class="btn ghost">Voir une démo rapide</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Modes -->
+        <div class="step-card hidden" data-step="mode">
+          <h2>Choisis comment sauvegarder tes leads</h2>
+          <div class="modes">
+            <div class="mode-card primary" id="modeCloud">
+              <div class="mode-title">Cloud (recommandé)</div>
+              <ul>
+                <li>Sauvegarde pérenne et multi-appareil.</li>
+                <li>Accès à la base existante (titres/personas).</li>
+                <li>Synchronisation Supabase sécurisée.</li>
+              </ul>
+              <div class="mode-note">Connexion requise.</div>
+              <button class="btn primary ghost full" id="btnPickCloud">Choisir Cloud</button>
+            </div>
+            <div class="mode-card" id="modeLocal">
+              <div class="mode-title">Local</div>
+              <ul>
+                <li>Données stockées dans ton navigateur.</li>
+                <li>Pas de base existante, pas de sync.</li>
+                <li>Tu pourras basculer vers le cloud plus tard.</li>
+              </ul>
+              <div class="mode-note">Aucune sauvegarde pérenne.</div>
+              <button class="btn ghost full" id="btnPickLocal">Choisir Local</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Auth -->
+        <div class="step-card hidden" data-step="auth">
+          <h2>1. Connecte ton compte</h2>
+          <p class="pitch">Utilise ton email pour synchroniser tes leads entre appareils.</p>
+          <div class="tabs">
+            <button class="tab active" data-tab="signin">Se connecter</button>
+            <button class="tab" data-tab="signup">Créer un compte</button>
+          </div>
+          <div class="form" id="formSignin">
+            <label>Email</label>
+            <input type="email" id="signinEmail" placeholder="vous@domaine.com" />
+            <label>Mot de passe</label>
+            <input type="password" id="signinPassword" placeholder="••••••••" />
+            <button id="btnSignin" class="btn primary">
+              <span id="btnSigninText">Se connecter</span>
+              <span id="btnSigninLoader" class="spinner hidden"></span>
+            </button>
+            <div class="micro">Lecture seule : aucune modification sur LinkedIn.</div>
+          </div>
+          <div class="form hidden" id="formSignup">
+            <label>Email</label>
+            <input type="email" id="signupEmail" placeholder="vous@domaine.com" />
+            <label>Mot de passe</label>
+            <input type="password" id="signupPassword" placeholder="Minimum 6 caractères" />
+            <button id="btnSignup" class="btn primary ghost">
+              <span id="btnSignupText">Créer un compte</span>
+              <span id="btnSignupLoader" class="spinner hidden"></span>
+            </button>
+            <div class="micro">Sauvegarde cloud et base existante accessibles.</div>
+          </div>
+          <div id="authStatus" class="feedback hidden" role="status"></div>
+        </div>
+
+        <!-- Step 4: Activate -->
+        <div class="step-card hidden" data-step="activate">
+          <h2>2. Active LeadTracker sur LinkedIn</h2>
+          <p class="pitch">
+            Va sur LinkedIn, ouvre un profil ou une recherche, puis clique sur le bouton LeadTracker pour enregistrer ton premier lead.
+          </p>
+          <div class="hero-illustration">
+            <div class="mock">Profil LinkedIn + badge LeadTracker + bouton “Save lead”</div>
+          </div>
+          <button id="btnOpenLinkedin" class="btn primary">Ouvrir LinkedIn</button>
+          <div class="micro">Nous sauvegardons : nom, entreprise, URL, titre, tags/notes.</div>
+        </div>
+
+        <!-- Step 5: First lead -->
+        <div class="step-card hidden" data-step="first">
+          <h2>3. Enregistre ton premier lead</h2>
+          <ul class="micro-steps">
+            <li>1. Va sur un profil LinkedIn.</li>
+            <li>2. Clique sur l’icône LeadTracker.</li>
+            <li>3. Clique sur “Enregistrer ce lead”.</li>
+          </ul>
+          <div id="firstLeadStatus" class="feedback info">En attente de ton premier lead…</div>
+          <div class="action-row">
+            <button id="btnDone" class="btn primary">Ouvrir mon tableau de bord</button>
+            <button id="btnStayLinkedin" class="btn ghost">Continuer sur LinkedIn</button>
+          </div>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="skipOnboarding" /> Ne plus afficher l’onboarding
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <script src="constants.js"></script>
+    <script src="utils.js"></script>
+    <script src="supabaseSync.js"></script>
+    <script src="onboarding.js"></script>
+  </body>
+</html>

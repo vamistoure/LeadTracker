@@ -45,6 +45,21 @@
           <div id="searchFeedback" class="feedback hidden" role="alert"></div>
         </div>
 
+        <div class="panel">
+          <div class="panel-title">Scanner cette page</div>
+          <p class="muted small">
+            Lecture unique et manuelle des résultats LinkedIn pour ajouter les profils correspondant à
+            vos titres.
+          </p>
+          <div class="actions">
+            <button id="btnScanSearch" class="btn ghost">
+              <span id="btnScanSearchText">Scanner les résultats</span>
+              <span id="btnScanSearchLoader" class="spinner inline hidden"></span>
+            </button>
+          </div>
+          <div id="scanFeedback" class="feedback hidden" role="alert"></div>
+        </div>
+
         <div class="panel info">
           <div class="panel-title">Conseil</div>
           <p class="muted small">
@@ -70,7 +85,7 @@
 
           <div class="form-group">
             <label>Entreprise actuelle</label>
-            <input type="text" id="leadCompany" readonly class="readonly" />
+            <input type="text" id="leadCompany" />
           </div>
 
           <div class="form-group">
@@ -222,6 +237,7 @@
 
     <script src="constants.js"></script>
     <script src="utils.js"></script>
+    <script src="supabaseSync.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

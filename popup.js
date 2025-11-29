@@ -23,6 +23,72 @@ function setContextBadge(label = '', tone = 'info') {
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 const formatTitle = (label = '') =>
   window?.formatTitle ? window.formatTitle(label) : (label || '').trim().toUpperCase();
+const parseEmployeeRange =
+  window?.parseEmployeeRange ||
+  ((raw = '') => {
+    if (!raw || typeof raw !== 'string') return null;
+    const num = parseInt(raw.replace(/[^\d]/g, ''), 10);
+    if (Number.isFinite(num)) return { min: num, max: num, raw };
+    return null;
+  });
+function isTopLeadByRules(lead) {
+  if (!lead || typeof lead !== 'object') return false;
+  
+  const headlineUpper = (lead.headline || '').toUpperCase();
+  const titleUpper = (lead.searchTitle || '').toUpperCase();
+  const companySegment = (lead.companySegment || '').toUpperCase();
+  const range = parseEmployeeRange(lead.employeeRange || '');
+  const maxEmp = range?.max || range?.min || null;
+  const industryUpper = (lead.companyIndustry || '').toUpperCase();
+  const tags = Array.isArray(lead.tags)
+    ? lead.tags.map((t) => String(t || '').toUpperCase())
+    : String(lead.tags || '').toUpperCase();
+
+  if (
+    (headlineUpper.includes('CEO') || headlineUpper.includes('CTO')) &&
+    maxEmp !== null &&
+    maxEmp < 500
+  ) {
+    return true;
+  }
+
+  const dataTitles = ['HEAD OF DATA', 'VP DATA', 'DATA DIRECTOR', 'CHIEF DATA', 'CDO'];
+  const matchDataTitle = dataTitles.some(
+    (t) => headlineUpper.includes(t) || titleUpper.includes(t)
+  );
+  if (
+    matchDataTitle &&
+    ((companySegment === 'SCALE-UP' || companySegment === 'PME') ||
+      (maxEmp !== null && maxEmp >= 50 && maxEmp <= 500))
+  ) {
+    return true;
+  }
+
+  if (!lead.contacted && lead.acceptanceDate) {
+    const days = getDaysDiff(lead.acceptanceDate);
+    if (Number.isFinite(days) && days <= 3 && (matchDataTitle || headlineUpper.includes('LEAD')))
+      return true;
+  }
+
+  if (!lead.contacted && lead.acceptanceDate) {
+    const days = getDaysDiff(lead.acceptanceDate);
+    if (Number.isFinite(days) && days <= 7) return true;
+    if (Number.isFinite(days) && days > 30) return true;
+  }
+
+  if (
+    maxEmp !== null &&
+    maxEmp >= 50 &&
+    maxEmp <= 500 &&
+    (industryUpper.includes('SAAS') || industryUpper.includes('FINTECH') || industryUpper.includes('DATA'))
+  ) {
+    return true;
+  }
+
+  if (tags && typeof tags === 'string' && tags.includes('PRIORITAIRE')) return true;
+  if (Array.isArray(tags) && tags.some((t) => t.includes('PRIORITAIRE'))) return true;
+  return false;
+}
 const canonicalizeTitle = (label, titles = []) => {
   const norm = formatTitle(label || '');
   if (!norm) return '';
@@ -124,6 +190,10 @@ async function updateExistingLead(updates) {
       updatedAt: Date.now()
     };
     await chrome.storage.local.set({ leads });
+    
+    // Synchroniser automatiquement avec Supabase
+    await pushLeadToSupabase(leads[idx]);
+    
     currentExistingLead = leads[idx];
     renderExistingLead(currentExistingLead);
   } catch (e) {
@@ -148,11 +218,135 @@ function renderExistingLead(lead) {
   getById('existingContactDate').textContent = formatDisplayDate(lead.contactedDate);
 
   configureExistingButtons(lead, currentExistingState);
+  showUpdateSuggestion(lead);
 }
 
 const showGlobalFeedback = (message, type = 'info') => {
   showFeedback('popupFeedback', message, type);
 };
+
+// Fonction pour vérifier si Supabase est configuré
+async function isSupabaseConfigured() {
+  try {
+    const data = await chrome.storage.local.get(['supabaseAccessToken', 'supabaseMode']);
+    // Si le mode local est activé, Supabase n'est pas utilisé
+    if (data?.supabaseMode === 'local') {
+      return false;
+    }
+    return !!(data?.supabaseAccessToken && typeof data.supabaseAccessToken === 'string');
+  } catch (e) {
+    return false;
+  }
+}
+
+async function pushLeadToSupabase(lead) {
+  if (!lead) return;
+  
+  // Vérifier si Supabase est configuré avant de continuer
+  const isConfigured = await isSupabaseConfigured();
+  if (!isConfigured) {
+    // Mode local : pas de synchronisation, fonctionnement normal
+    return;
+  }
+  
+  try {
+    const { supabaseAccessToken } = await chrome.storage.local.get(['supabaseAccessToken']);
+    if (!supabaseAccessToken) return;
+    if (!window?.supabaseSync || !window.supabaseSync.pushChanges) return;
+    await window.supabaseSync.pushChanges(supabaseAccessToken, { leads: [lead], searchTitles: [] });
+    await chrome.storage.local.set({ supabaseLastSync: new Date().toISOString() });
+  } catch (e) {
+    console.warn('Supabase push lead failed:', e);
+  }
+}
+
+async function pushTitleToSupabase(title) {
+  if (!title) return;
+  
+  // Vérifier si Supabase est configuré avant de continuer
+  const isConfigured = await isSupabaseConfigured();
+  if (!isConfigured) {
+    // Mode local : pas de synchronisation, fonctionnement normal
+    return;
+  }
+  
+  try {
+    const { supabaseAccessToken } = await chrome.storage.local.get(['supabaseAccessToken']);
+    if (!supabaseAccessToken) return;
+    if (!window?.supabaseSync || !window.supabaseSync.pushChanges) return;
+    await window.supabaseSync.pushChanges(supabaseAccessToken, {
+      leads: [],
+      searchTitles: [title]
+    });
+    await chrome.storage.local.set({ supabaseLastSync: new Date().toISOString() });
+  } catch (e) {
+    console.warn('Supabase push title failed:', e);
+  }
+}
+
+async function showUpdateSuggestion(lead) {
+  try {
+    const { pendingUpdateSuggestion } = await chrome.storage.local.get(['pendingUpdateSuggestion']);
+    if (!pendingUpdateSuggestion) return;
+    if (
+      pendingUpdateSuggestion.leadId !== lead.id &&
+      pendingUpdateSuggestion.profileUrl !== lead.profileUrl
+    )
+      return;
+
+    const feedback = getById('leadFeedback');
+    if (!feedback) return;
+    feedback.classList.remove('hidden', 'error');
+    feedback.classList.add('info');
+    feedback.textContent = 'Mise à jour disponible pour ce lead.';
+
+    const btnApply = document.createElement('button');
+    btnApply.className = 'btn primary small-inline';
+    btnApply.textContent = 'Appliquer';
+    btnApply.style.marginLeft = '8px';
+
+    const btnIgnore = document.createElement('button');
+    btnIgnore.className = 'btn ghost small-inline';
+    btnIgnore.textContent = 'Ignorer';
+    btnIgnore.style.marginLeft = '6px';
+
+    const actions = document.createElement('div');
+    actions.style.marginTop = '6px';
+    actions.appendChild(btnApply);
+    actions.appendChild(btnIgnore);
+    feedback.appendChild(actions);
+
+    btnApply.addEventListener('click', async () => {
+      try {
+        const storage = await chrome.storage.local.get(['leads', 'pendingUpdateSuggestion']);
+        let leads = storage.leads || [];
+        const idx = leads.findIndex((l) => l.id === lead.id);
+        if (idx === -1) return;
+        const newData = storage.pendingUpdateSuggestion?.newData || {};
+        leads[idx] = {
+          ...leads[idx],
+          ...newData,
+          updatedAt: Date.now()
+        };
+        await chrome.storage.local.set({ leads, pendingUpdateSuggestion: null });
+        await pushLeadToSupabase(leads[idx]);
+        currentExistingLead = leads[idx];
+        renderExistingLead(leads[idx]);
+        showFeedback('leadFeedback', 'Mise à jour appliquée.', 'success');
+      } catch (e) {
+        console.error('Apply update failed:', e);
+        showFeedback('leadFeedback', 'Échec de la mise à jour.', 'error');
+      }
+    });
+
+    btnIgnore.addEventListener('click', async () => {
+      await chrome.storage.local.set({ pendingUpdateSuggestion: null });
+      showFeedback('leadFeedback', '', 'info');
+    });
+  } catch (e) {
+    console.warn('showUpdateSuggestion failed:', e);
+  }
+}
 
 // Helper pour gérer l'état du bouton (loading/disabled)
 function setButtonLoading(buttonId, isLoading) {
@@ -183,12 +377,13 @@ function getDashboardUrl(params = {}) {
 }
 
 function openDashboard(params = {}) {
-  const targetUrl = getDashboardUrl(params);
+  // Toujours diriger vers l'onboarding ; si déjà connecté, onboarding redirigera vers le dashboard
+  const targetUrl = chrome.runtime.getURL ? chrome.runtime.getURL('onboarding.html') : 'onboarding.html';
   if (chrome.tabs?.create) {
     chrome.tabs.create({ url: targetUrl });
     return;
   }
-  if (!params.leadId && !params.profileUrl && chrome.runtime.openOptionsPage) {
+  if (chrome.runtime.openOptionsPage) {
     chrome.runtime.openOptionsPage();
   }
 }
@@ -199,6 +394,7 @@ let existingLeadId = null; // ID du lead existant si on est en mode mise à jour
 let isFromConnectButton = false; // Flag pour indiquer si le contexte vient d'un clic sur Connect
 let currentExistingLead = null;
 let currentExistingState = null;
+let activeTabId = null;
 
 function harmonizeLeads() {
   return new Promise((resolve) => {
@@ -221,6 +417,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     tab = tabs[0];
+    activeTabId = tab?.id || null;
     if (!tab || !tab.url) {
       showView('view-other');
       showGlobalFeedback("Impossible de récupérer l'onglet actif. Réessayez.", 'error');
@@ -508,6 +705,7 @@ function setupEventListeners() {
             createdAt: Date.now()
           });
           await chrome.storage.local.set({ searchTitles: titles });
+          await pushTitleToSupabase(titles[titles.length - 1]);
 
           setButtonLoading('btnSaveSearch', false);
           showFeedback('searchFeedback', 'Titre enregistré.', 'success');
@@ -527,6 +725,63 @@ function setupEventListeners() {
         setButtonLoading('btnSaveSearch', false);
         showFeedback('searchFeedback', "Erreur lors de l'enregistrement.", 'error');
         console.error('Erreur sauvegarde titre:', error);
+      }
+    });
+  }
+
+  const btnScanSearch = getById('btnScanSearch');
+  if (btnScanSearch) {
+    btnScanSearch.addEventListener('click', async () => {
+      if (!activeTabId) {
+        showFeedback('scanFeedback', 'Ouvrez une page de résultats LinkedIn puis relancez.', 'error');
+        return;
+      }
+
+      setButtonLoading('btnScanSearch', true);
+      showFeedback('scanFeedback', 'Scan en cours...', 'info');
+
+      try {
+        let res = null;
+        try {
+          res = await chrome.tabs.sendMessage(activeTabId, { type: 'SCAN_SEARCH_PAGE' });
+        } catch (err) {
+          const injected = await tryInjectContentScript(activeTabId);
+          if (injected) {
+            res = await chrome.tabs.sendMessage(activeTabId, { type: 'SCAN_SEARCH_PAGE' });
+          } else {
+            throw err;
+          }
+        }
+
+        if (!res || !res.ok) {
+          const code = res?.error || 'unknown';
+          const message =
+            code === 'not_search_page'
+              ? 'Ouvrez une page de résultats LinkedIn (onglet People) ou la liste People d’une entreprise puis relancez.'
+              : code === 'no_titles'
+              ? 'Aucun titre enregistré. Ajoutez au moins un titre de recherche avant de scanner.'
+              : 'Scan indisponible. Rafraîchissez la page LinkedIn puis réessayez.';
+          showFeedback('scanFeedback', message, 'warning');
+        } else {
+          const added = res.added || 0;
+          const duplicates = res.duplicates || 0;
+          const scanned = res.scanned || 0;
+          const tone = added ? 'success' : 'info';
+          showFeedback(
+            'scanFeedback',
+            `Scan terminé : ${added} ajout(s), ${duplicates} déjà présents (cartes lues : ${scanned}).`,
+            tone
+          );
+        }
+      } catch (e) {
+        console.warn('[LeadTracker] Scan search error:', e);
+        showFeedback(
+          'scanFeedback',
+          'Impossible de scanner cette page. Rafraîchissez LinkedIn puis réessayez.',
+          'error'
+        );
+      } finally {
+        setButtonLoading('btnScanSearch', false);
       }
     });
   }
@@ -620,33 +875,52 @@ function setupEventListeners() {
   const btnSaveLead = getById('btnSaveLead');
   if (btnSaveLead) {
     btnSaveLead.addEventListener('click', async () => {
-      const rawSelection = select.value;
-      const rawTitle = rawSelection === '__custom__' ? customInput.value.trim() : rawSelection;
-      const normalizedTitle = formatTitle(rawTitle);
-
-      const connectionType = document.querySelector('input[name="connectionType"]:checked').value;
-      const acceptanceDate = getById('acceptanceDate').value || null;
-      const requestDate = getById('requestDate').value || null;
-      const isContacted = getById('isContacted').checked;
-      const isTopLead = getById('isTopLead')?.checked || false;
-
-      if (!normalizedTitle || normalizedTitle === '') {
-        showFeedback('leadFeedback', 'Le titre de recherche est obligatoire.', 'error');
-        return;
-      }
-      if (connectionType !== 'outbound_pending' && !acceptanceDate) {
-        showFeedback(
-          'leadFeedback',
-          "La date d'acceptation est requise pour une connexion acceptée.",
-          'error'
-        );
-        return;
-      }
-
       setButtonLoading('btnSaveLead', true);
       showFeedback('leadFeedback', 'Enregistrement en cours...', 'info');
 
       try {
+        // Validation des champs obligatoires
+        const rawSelection = select?.value;
+        if (!rawSelection) {
+          setButtonLoading('btnSaveLead', false);
+          showFeedback('leadFeedback', 'Erreur: Sélection de titre invalide.', 'error');
+          return;
+        }
+        
+        const rawTitle = rawSelection === '__custom__' ? (customInput?.value || '').trim() : rawSelection;
+        const normalizedTitle = formatTitle(rawTitle);
+
+        const connectionTypeRadio = document.querySelector('input[name="connectionType"]:checked');
+        if (!connectionTypeRadio) {
+          setButtonLoading('btnSaveLead', false);
+          showFeedback('leadFeedback', 'Erreur: Type de connexion non sélectionné.', 'error');
+          return;
+        }
+        const connectionType = connectionTypeRadio.value;
+        
+        const acceptanceDateInput = getById('acceptanceDate');
+        const acceptanceDate = acceptanceDateInput?.value || null;
+        const requestDateInput = getById('requestDate');
+        const requestDate = requestDateInput?.value || null;
+        const isContactedCheckbox = getById('isContacted');
+        const isContacted = isContactedCheckbox?.checked || false;
+        const isTopLeadCheckbox = getById('isTopLead');
+        const isTopLead = isTopLeadCheckbox?.checked || false;
+
+        if (!normalizedTitle || normalizedTitle === '') {
+          setButtonLoading('btnSaveLead', false);
+          showFeedback('leadFeedback', 'Le titre de recherche est obligatoire.', 'error');
+          return;
+        }
+        if (connectionType !== 'outbound_pending' && !acceptanceDate) {
+          setButtonLoading('btnSaveLead', false);
+          showFeedback(
+            'leadFeedback',
+            "La date d'acceptation est requise pour une connexion acceptée.",
+            'error'
+          );
+          return;
+        }
         const storageTitles = await chrome.storage.local.get(['searchTitles']);
         let titles = storageTitles.searchTitles || [];
         const canonicalTitle = canonicalizeTitle(rawTitle, titles);
@@ -670,7 +944,14 @@ function setupEventListeners() {
         if (existingLeadId) {
           targetIndex = leads.findIndex((l) => l.id === existingLeadId);
         }
-        const profileUrl = getById('leadUrl').value;
+        const profileUrlInput = getById('leadUrl');
+        if (!profileUrlInput || !profileUrlInput.value) {
+          setButtonLoading('btnSaveLead', false);
+          showFeedback('leadFeedback', 'Erreur: URL du profil manquante.', 'error');
+          return;
+        }
+        const profileUrl = profileUrlInput.value;
+        
         if (targetIndex === -1) {
           targetIndex = leads.findIndex((l) => {
             if (connectionType === 'outbound_pending' && l.direction === 'outbound_pending') {
@@ -685,19 +966,43 @@ function setupEventListeners() {
         const targetLead = targetIndex !== -1 ? leads[targetIndex] : null;
         const contactedDate = isContacted ? targetLead?.contactedDate || getTodayDate() : null;
 
+        const leadNameInput = getById('leadName');
+        const leadHeadlineInput = getById('leadHeadline');
+        const leadCompanyInput = getById('leadCompany');
+        
+        if (!leadNameInput) {
+          setButtonLoading('btnSaveLead', false);
+          showFeedback('leadFeedback', 'Erreur: Champ nom manquant.', 'error');
+          return;
+        }
+
         const leadData = {
-          name: getById('leadName').value,
-          headline: getById('leadHeadline').value,
+          name: leadNameInput.value || 'Inconnu',
+          headline: leadHeadlineInput?.value || '',
           profileUrl: profileUrl,
-          company: getById('leadCompany').value || '',
+          company: leadCompanyInput?.value || '',
+          employeeRange: targetLead?.employeeRange || '',
+          companySegment: targetLead?.companySegment || '',
+          companyIndustry: targetLead?.companyIndustry || '',
           searchTitle: canonicalTitle,
           direction: connectionType,
           requestDate: requestDate,
           acceptanceDate: acceptanceDate,
           contacted: isContacted,
           contactedDate: contactedDate,
-          topLead: isTopLead
+          topLead: isTopLead || false
         };
+        
+        // Calculer topLead après avoir construit leadData pour éviter référence circulaire
+        if (!isTopLead && targetLead) {
+          try {
+            const mergedLeadForRules = { ...targetLead, ...leadData };
+            leadData.topLead = isTopLeadByRules(mergedLeadForRules);
+          } catch (e) {
+            console.warn('Erreur calcul topLead:', e);
+            leadData.topLead = false;
+          }
+        }
 
         if (targetIndex !== -1) {
           leads[targetIndex] = {
@@ -708,6 +1013,7 @@ function setupEventListeners() {
             updatedAt: Date.now()
           };
           await chrome.storage.local.set({ leads: leads });
+          await pushLeadToSupabase(leads[targetIndex]);
 
           setButtonLoading('btnSaveLead', false);
           showFeedback('leadFeedback', 'Lead mis à jour.', 'success');
@@ -722,6 +1028,7 @@ function setupEventListeners() {
           };
           leads.push(newLead);
           await chrome.storage.local.set({ leads: leads });
+          await pushLeadToSupabase(newLead);
 
           setButtonLoading('btnSaveLead', false);
           showFeedback('leadFeedback', 'Lead enregistré.', 'success');
@@ -730,8 +1037,16 @@ function setupEventListeners() {
         }
       } catch (error) {
         setButtonLoading('btnSaveLead', false);
-        showFeedback('leadFeedback', "Erreur lors de l'enregistrement.", 'error');
         console.error('Erreur sauvegarde lead:', error);
+        // Afficher un message d'erreur plus détaillé pour le débogage
+        const errorMessage = error?.message || error?.toString() || 'Erreur inconnue';
+        showFeedback('leadFeedback', `Erreur lors de l'enregistrement: ${errorMessage}`, 'error');
+        // Log complet pour le débogage
+        console.error('Détails de l\'erreur:', {
+          error,
+          stack: error?.stack,
+          name: error?.name
+        });
       }
     });
   }

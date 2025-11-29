@@ -34,6 +34,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     return true;
   }
+  if (request.type === 'SCAN_SEARCH_PAGE') {
+    handleScanSearchPage(sendResponse);
+    return true;
+  }
   return false;
 });
 
@@ -41,8 +45,158 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Fonction pour vérifier si Supabase est configuré
+async function isSupabaseConfigured() {
+  try {
+    const data = await chrome.storage.local.get(['supabaseAccessToken', 'supabaseMode']);
+    // Si le mode local est activé, Supabase n'est pas utilisé
+    if (data?.supabaseMode === 'local') {
+      return false;
+    }
+    return !!(data?.supabaseAccessToken && typeof data.supabaseAccessToken === 'string');
+  } catch (e) {
+    return false;
+  }
+}
+
+async function pushLeadsToSupabase(leads) {
+  try {
+    if (!leads || !leads.length) {
+      console.log('[LeadTracker] pushLeadsToSupabase: Aucun lead à synchroniser');
+      return;
+    }
+    
+    console.log('[LeadTracker] 🔄 Tentative synchronisation:', {
+      leadCount: leads.length,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Vérifier si Supabase est configuré avant d'envoyer
+    const isConfigured = await isSupabaseConfigured();
+    if (!isConfigured) {
+      console.log('[LeadTracker] ⏭️ Mode local ou Supabase non configuré - synchronisation ignorée');
+      return;
+    }
+    
+    console.log('[LeadTracker] ✅ Supabase configuré, envoi des leads au background...');
+    
+    chrome.runtime.sendMessage({ type: 'PUSH_SUPABASE', leads }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('[LeadTracker] ❌ Erreur envoi message Supabase:', chrome.runtime.lastError.message);
+      } else if (response) {
+        if (response.ok) {
+          console.log('[LeadTracker] ✅ Synchronisation réussie (réponse du background)');
+        } else {
+          console.error('[LeadTracker] ❌ Synchronisation échouée:', response.error);
+        }
+      }
+    });
+  } catch (e) {
+    console.error('[LeadTracker] ❌ Exception pushLeadsToSupabase:', {
+      error: e,
+      message: e?.message,
+      stack: e?.stack
+    });
+  }
+}
+
+function parseEmployeeRange(raw = '') {
+  if (!raw || typeof raw !== 'string') return null;
+  const text = raw.replace(/\u202f/g, ' ').replace(/\u00a0/g, ' ').trim();
+  if (!text) return null;
+
+  const parseNum = (token) => {
+    if (!token) return null;
+    const m = token.trim().match(/([\d.,]+)\s*([kKmM]?)/);
+    if (!m) return null;
+    const base = parseFloat(m[1].replace(/,/g, ''));
+    if (!Number.isFinite(base)) return null;
+    const suffix = (m[2] || '').toLowerCase();
+    if (suffix === 'k') return Math.round(base * 1000);
+    if (suffix === 'm') return Math.round(base * 1000000);
+    return Math.round(base);
+  };
+
+  const plusMatch = text.match(/([\d.,]+\s*[kKmM]?)\s*\+\s*(employ|employe|employee)/i);
+  if (plusMatch) {
+    const min = parseNum(plusMatch[1]);
+    if (Number.isFinite(min)) return { min, max: null, raw: text };
+  }
+  const rangeMatch = text.match(/([\d.,]+\s*[kKmM]?)\s*[-–—]\s*([\d.,]+\s*[kKmM]?)/);
+  if (rangeMatch) {
+    const min = parseNum(rangeMatch[1]);
+    const max = parseNum(rangeMatch[2]);
+    if (Number.isFinite(min) && Number.isFinite(max)) return { min, max, raw: text };
+  }
+  const single = parseNum(text);
+  if (Number.isFinite(single)) return { min: single, max: single, raw: text };
+  return null;
+}
+
+function computeCompanySegment(range) {
+  if (!range || (!range.min && !range.max)) return null;
+  const min = range.min || 0;
+  const max = range.max || min;
+  const point = max || min;
+  if (point <= 10) return 'Startup';
+  if (point <= 50) return 'Scale-up';
+  if (point <= 250) return 'PME';
+  if (point <= 1000) return 'ETI';
+  return 'Grand groupe';
+}
+
+function simplifyTitle(label = '') {
+  if (!label || typeof label !== 'string') return '';
+  let t = label.trim().toUpperCase();
+
+  // Connecteurs fréquents
+  t = t.replace(/[+]/g, ' AND ');
+  t = t.replace(/&/g, ' AND ');
+  t = t.replace(/\//g, ' ');
+
+  // Simplifications de domaines Data/Analytics/BI/AI/ML
+  t = t.replace(/\bDATA\s+AND\s+ANALYTICS\b/g, 'DATA');
+  t = t.replace(/\bDATA\s*&\s*ANALYTICS\b/g, 'DATA');
+  t = t.replace(/\bANALYTICS\s+AND\s+DATA\b/g, 'DATA');
+  t = t.replace(/\bDATA\s+AND\s+INSIGHTS\b/g, 'DATA');
+  t = t.replace(/\bANALYTICS\s+AND\s+INSIGHTS\b/g, 'ANALYTICS');
+  t = t.replace(/\bBUSINESS\s+INTELLIGENCE\b/g, 'BI');
+  t = t.replace(/\bMACHINE\s+LEARNING\b/g, 'ML');
+  t = t.replace(/\bARTIFICIAL\s+INTELLIGENCE\b/g, 'AI');
+  t = t.replace(/\bBIG\s+DATA\b/g, 'DATA');
+
+  // Rôles / synonymes courants
+  t = t.replace(/\bVICE PRESIDENT\b/g, 'VP');
+  t = t.replace(/\bVICE-PRESIDENT\b/g, 'VP');
+  t = t.replace(/\bRESPONSABLE\b/g, 'MANAGER');
+  t = t.replace(/\bDIRECTEUR\b/g, 'DIRECTOR');
+  t = t.replace(/\bDIRECTRICE\b/g, 'DIRECTOR');
+  t = t.replace(/\bHEAD OF\b/g, 'HEAD');
+  t = t.replace(/\bLEADER\b/g, 'LEAD');
+  t = t.replace(/\bMANAGING DIRECTOR\b/g, 'MD');
+  t = t.replace(/\bSENIOR\b/g, 'SR');
+
+  // Mots de liaison à supprimer
+  t = t.replace(/\b(OF|DE|DU|DES|LA|LE|LES|L’|L'|THE)\b/g, ' ');
+  t = t.replace(/\b(AND|ET|WITH|IN|EN)\b/g, ' ');
+
+  // Nettoyage espaces multiples
+  t = t.replace(/\s+/g, ' ').trim();
+
+  // Déduplication simple des tokens (préserve l'ordre)
+  const tokens = t.split(' ').filter(Boolean);
+  const seen = new Set();
+  const deduped = tokens.filter((tok) => {
+    if (seen.has(tok)) return false;
+    seen.add(tok);
+    return true;
+  });
+
+  return deduped.join(' ');
+}
+
 function normalizeTitle(label = '') {
-  return label.trim().toUpperCase();
+  return simplifyTitle(label);
 }
 
 async function handleGetPageContext(sendResponse) {
@@ -56,6 +210,9 @@ async function handleGetPageContext(sendResponse) {
       }
     }
     console.log('[LeadTracker] Contexte détecté:', context);
+    if (context.contextType === 'profile') {
+      checkLeadForUpdates(context);
+    }
     lastCallTime = Date.now();
     sendResponse(context);
   } catch (error) {
@@ -190,9 +347,227 @@ function analyzePageContextOnce() {
   return { contextType: 'other' };
 }
 
+async function handleScanSearchPage(sendResponse) {
+  try {
+    const url = window.location.href;
+    const isSearchPeople = url.includes('/search/results/people');
+    const isCompanyPeople = url.includes('/company/') && url.includes('/people');
+    if (!isSearchPeople && !isCompanyPeople) {
+      sendResponse({ ok: false, error: 'not_search_page' });
+      return;
+    }
+    const companyInfo = isCompanyPeople
+      ? readCompanyInfoFromPage()
+      : { sizeText: '', industryText: '' };
+    const companySizeText = companyInfo.sizeText || '';
+    const companyRange = companySizeText ? parseEmployeeRange(companySizeText) : null;
+    const companySegment = companyRange ? computeCompanySegment(companyRange) : null;
+    const companyNameFromPage = isCompanyPeople ? readCompanyNameFromCompanyPage() : '';
+    const companyIndustry = isCompanyPeople ? companyInfo.industryText || '' : '';
+
+    let { leads = [], searchTitles = [] } = await chrome.storage.local.get(['leads', 'searchTitles']);
+    if (!searchTitles.length) {
+      sendResponse({ ok: false, error: 'no_titles' });
+      return;
+    }
+
+    const canonicalByNorm = new Map();
+    searchTitles.forEach((t) => {
+      const norm = simplifyTitle(t.label || '');
+      if (!norm) return;
+      if (norm.length < 3) return; // éviter les matchs sur 2 lettres (ex: PO dans un nom)
+      if (!canonicalByNorm.has(norm)) {
+        // Stocker le label original lisible au lieu de la version normalisée
+        // pour être cohérent avec autoCaptureProfileIfMatch qui utilise t.label
+        canonicalByNorm.set(norm, t.label);
+      }
+    });
+
+    if (!canonicalByNorm.size) {
+      sendResponse({ ok: false, error: 'no_titles' });
+      return;
+    }
+
+    // Backfill pour tous les leads de la même entreprise (page People)
+    const now = Date.now();
+    if (isCompanyPeople) {
+      const companyNameNorm = simplifyTitle(companyNameFromPage || '');
+      if (companyNameNorm) {
+        const updatedBackfill = [];
+        leads = leads.map((l) => {
+          const leadCompanyNorm = simplifyTitle(l.company || '');
+          if (leadCompanyNorm === companyNameNorm) {
+            const merged = {
+              ...l,
+              company: l.company || companyNameFromPage || '',
+              employeeRange: l.employeeRange || (companyRange ? companyRange.raw || companySizeText : companySizeText || ''),
+              companySegment:
+                l.companySegment ||
+                companySegment ||
+                computeCompanySegment(parseEmployeeRange(l.employeeRange || '') || null) ||
+                '',
+              companyIndustry: l.companyIndustry || companyIndustry || '',
+              updatedAt: now
+            };
+            updatedBackfill.push(merged.id);
+            return merged;
+          }
+          return l;
+        });
+        if (updatedBackfill.length) {
+          await chrome.storage.local.set({ leads });
+          // Synchroniser automatiquement avec Supabase
+          const backfilledLeads = leads.filter(l => updatedBackfill.includes(l.id));
+          if (backfilledLeads.length) {
+            pushLeadsToSupabase(backfilledLeads);
+          }
+        }
+      }
+    }
+
+    let cards = Array.from(
+      document.querySelectorAll(
+        '[data-chameleon-result-urn], .reusable-search__result-container, .entity-result, li[class*="reusable-search"], .org-people-profile-card__profile-info'
+      )
+    );
+
+    // Fallback: si aucune carte détectée, tenter via les liens /in/ (company people est parfois simplifié)
+    if (!cards.length) {
+      const anchors = Array.from(document.querySelectorAll('a[href*="/in/"]'));
+      const wrapped = anchors.map((a) => a.closest('li') || a.closest('div') || a);
+      cards = wrapped.filter(Boolean);
+    }
+
+    const knownUrls = new Set((leads || []).map((l) => l.profileUrl));
+    let duplicates = 0;
+    let updatedExisting = 0;
+    const added = [];
+    const changedLeads = [];
+
+    for (const card of cards) {
+      const profile = extractProfileFromSearchCard(null, card);
+      if (!profile || !profile.url) continue;
+      const existingIndex = leads.findIndex((l) => l.profileUrl === profile.url);
+      const existingLead = existingIndex !== -1 ? leads[existingIndex] : null;
+      const isDuplicate = existingLead !== null;
+
+      const headlineNorm = simplifyTitle(profile.headline || '');
+      const nameNorm = simplifyTitle(profile.name || '');
+
+      let matchedLabel = null;
+      for (const [norm, label] of canonicalByNorm.entries()) {
+        if (!norm) continue;
+        const pattern = new RegExp(`\\b${norm.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b`);
+        if ((headlineNorm && pattern.test(headlineNorm)) || (nameNorm && pattern.test(nameNorm))) {
+          matchedLabel = label;
+          break;
+        }
+      }
+      if (!matchedLabel) continue;
+
+      const rangeValue = companyRange ? companyRange.raw || companySizeText : companySizeText || '';
+      const leadUpdate = {
+        name: profile.name || existingLead?.name || 'Inconnu',
+        headline: profile.headline || existingLead?.headline || '',
+        company: companyNameFromPage || existingLead?.company || '',
+        employeeRange: rangeValue || existingLead?.employeeRange || '',
+        companySegment: companySegment || existingLead?.companySegment || '',
+        companyIndustry: companyIndustry || existingLead?.companyIndustry || '',
+        searchTitle: matchedLabel
+      };
+
+      if (isDuplicate) {
+        duplicates++;
+        leads[existingIndex] = {
+          ...existingLead,
+          ...leadUpdate,
+          updatedAt: now
+        };
+        updatedExisting++;
+        changedLeads.push(leads[existingIndex]);
+      } else {
+        knownUrls.add(profile.url);
+        const newLead = {
+          id: now + '_' + Math.random().toString(36).slice(2),
+          profileUrl: profile.url,
+          direction: 'outbound_pending',
+          requestDate: null,
+          acceptanceDate: null,
+          contacted: false,
+          contactedDate: null,
+          topLead: false,
+          createdAt: now,
+          updatedAt: now,
+          ...leadUpdate
+        };
+        added.push(newLead);
+        changedLeads.push(newLead);
+      }
+    }
+
+    let finalLeads = leads;
+    if (added.length) {
+      finalLeads = [...leads, ...added];
+    }
+    if (updatedExisting || added.length) {
+      await chrome.storage.local.set({ leads: finalLeads });
+      pushLeadsToSupabase(changedLeads);
+    }
+
+    sendResponse({
+      ok: true,
+      added: added.length,
+      duplicates,
+      updatedExisting,
+      scanned: cards.length
+    });
+  } catch (error) {
+    console.error('[LeadTracker] Scan search error:', error);
+    sendResponse({ ok: false, error: 'exception', message: error?.message || 'unknown' });
+  }
+}
+
 function debugLog(...args) {
   if (DEBUG_HEADLINE) {
     console.log(...args);
+  }
+}
+
+async function checkLeadForUpdates(context) {
+  try {
+    if (!context || context.contextType !== 'profile' || !context.profileUrl) return;
+    const { leads = [] } = await chrome.storage.local.get(['leads']);
+    const lead = leads.find((l) => l.profileUrl === context.profileUrl);
+    if (!lead) return;
+
+    const newData = {};
+    if (context.profileName && context.profileName !== lead.name) newData.name = context.profileName;
+    if (context.profileHeadline && context.profileHeadline !== lead.headline)
+      newData.headline = context.profileHeadline;
+    if (context.profileCompany && context.profileCompany !== lead.company)
+      newData.company = context.profileCompany;
+
+    // Lire la dernière expérience pour détecter changement de poste/entreprise
+    const latestExp = readLatestExperience();
+    if (latestExp.title && latestExp.title !== lead.headline) {
+      newData.headline = latestExp.title;
+    }
+    if (latestExp.company && latestExp.company !== lead.company) {
+      newData.company = latestExp.company;
+    }
+
+    if (!Object.keys(newData).length) return;
+
+    const suggestion = {
+      leadId: lead.id,
+      profileUrl: lead.profileUrl,
+      newData,
+      timestamp: Date.now()
+    };
+    await chrome.storage.local.set({ pendingUpdateSuggestion: suggestion });
+    sendNotification('Mise à jour détectée', 'Des changements sont disponibles pour ce lead.');
+  } catch (e) {
+    console.warn('checkLeadForUpdates failed:', e);
   }
 }
 
@@ -203,6 +578,7 @@ function debugLog(...args) {
 function readProfileHeadline() {
   const selectors = [
     '[data-anonymize="headline"]',
+    '[data-generated-suggestion-target]',
     '.pv-text-details__left-panel .text-body-medium',
     '.pv-text-details__left-panel .text-body-small',
     '.pv-text-details__right-panel .text-body-medium',
@@ -210,6 +586,7 @@ function readProfileHeadline() {
     '.text-body-medium.break-words',
     '.text-body-medium',
     'div[class*="text-body-medium"]',
+    'section.artdeco-card div.inline-show-more-text',
     'section.pv-top-card h2',
     'section.pv-top-card span.text-body-medium',
     'main h2[data-anonymize="headline"]',
@@ -239,39 +616,86 @@ function readProfileHeadline() {
 }
 
 function readProfileCompany() {
-  const selectors = [
-    '.pv-text-details__right-panel .pv-text-details__right-panel-item',
-    '.pv-text-details__right-panel .text-body-medium',
-    '.pv-text-details__right-panel .text-body-small',
-    '.pv-text-details__company-name-text',
-    'a[href*="/company/"] span',
-    'a[href*="/company/"]',
-    '[data-anonymize="company-name"]',
-    '.pv-entity__secondary-title',
-    'section[id*="experience"] li span.t-14.t-normal',
-    'section[id*="experience"] li .inline-show-more-text'
-  ];
+  // 1) Dernière expérience (la plus récente) si visible
+  const expSection =
+    document.querySelector('section[id*="experience"]') ||
+    document.querySelector('section.pv-profile-section__section-info');
 
-  for (const selector of selectors) {
-    const el = document.querySelector(selector);
-    if (el && el.innerText?.trim()) {
-      return el.innerText.trim();
+  if (expSection) {
+    const firstItem =
+      expSection.querySelector('li.artdeco-list__item') ||
+      expSection.querySelector('.pv-entity__position-group-role-item') ||
+      expSection.querySelector('li');
+
+    if (firstItem) {
+      const companySelectors = [
+        '.t-14.t-normal.t-black span',
+        '.pv-entity__secondary-title',
+        'a[href*="/company/"] span',
+        'a[href*="/company/"]'
+      ];
+
+      for (const selector of companySelectors) {
+        const companyEl = firstItem.querySelector(selector);
+        if (companyEl && companyEl.innerText?.trim()) {
+          return companyEl.innerText.trim();
+        }
+      }
     }
   }
 
-  // Fallback: essayer via meta title/description en récupérant la partie après "chez"/"at"
+  // 2) Extraction via headline (après @/at/chez/in/with/avec)
+  const headline = readProfileHeadline() || '';
+  if (headline) {
+    const markers = ['@', ' at ', ' chez ', ' in ', ' with ', ' avec '];
+    const lower = headline.toLowerCase();
+    let idx = -1;
+    let markerLen = 0;
+
+    for (const m of markers) {
+      const searchToken = m.trim() === '@' ? '@' : m;
+      const i = lower.indexOf(searchToken);
+      if (i !== -1 && (idx === -1 || i < idx)) {
+        idx = i;
+        markerLen = m.length;
+      }
+    }
+
+    if (idx !== -1) {
+      const rawCompany =
+        markerLen === 1 ? headline.substring(idx + 1) : headline.substring(idx + markerLen);
+
+      const company = rawCompany
+        .split(/[\|\-–,·]/)[0]
+        .replace(/^\s*(de|du|des|la|le|l’|l'|the)\s+/i, '')
+        .trim();
+
+      if (company) return company;
+    }
+  }
+
+  // 3) Fallback via métadonnées
   const metaOg = document.querySelector('meta[property="og:title"]')?.content || '';
   const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
   const candidates = [metaOg, metaDesc];
   for (const raw of candidates) {
     if (!raw) continue;
     const lower = raw.toLowerCase();
-    const idxChez = lower.indexOf(' chez ');
-    const idxAt = lower.indexOf(' at ');
-    const cutIdx = idxChez !== -1 ? idxChez : idxAt;
-    if (cutIdx !== -1) {
+    const markers = [' chez ', ' at ', ' in ', ' with ', ' avec '];
+    let idx = -1;
+    let markerLen = 0;
+
+    for (const m of markers) {
+      const i = lower.indexOf(m);
+      if (i !== -1 && (idx === -1 || i < idx)) {
+        idx = i;
+        markerLen = m.length;
+      }
+    }
+
+    if (idx !== -1) {
       const company = raw
-        .substring(cutIdx + 5)
+        .substring(idx + markerLen)
         .split(/[\|\-–]/)[0]
         .trim();
       if (company) return company;
@@ -279,6 +703,124 @@ function readProfileCompany() {
   }
 
   return '';
+}
+
+function readLatestExperience() {
+  const expSection =
+    document.querySelector('section[id*="experience"]') ||
+    document.querySelector('section.pv-profile-section__section-info');
+
+  if (!expSection) return { title: '', company: '' };
+
+  const firstItem =
+    expSection.querySelector('li.artdeco-list__item') ||
+    expSection.querySelector('.pv-entity__position-group-role-item') ||
+    expSection.querySelector('li');
+
+  if (!firstItem) return { title: '', company: '' };
+
+  let title = '';
+  let company = '';
+
+  const titleSelectors = [
+    '.t-16.t-black.t-bold',
+    '.mr1.t-bold span[aria-hidden="true"]',
+    '.inline-show-more-text',
+    'span[aria-hidden="true"]',
+    '.pv-entity__summary-info h3',
+    'h3'
+  ];
+  for (const sel of titleSelectors) {
+    const el = firstItem.querySelector(sel);
+    if (el && el.innerText?.trim()) {
+      title = el.innerText.trim();
+      break;
+    }
+  }
+
+  const companySelectors = [
+    '.t-14.t-normal',
+    '.pv-entity__secondary-title',
+    'a[href*="/company/"] span',
+    'a[href*="/company/"]'
+  ];
+  for (const sel of companySelectors) {
+    const el = firstItem.querySelector(sel);
+    if (el && el.innerText?.trim()) {
+      company = el.innerText.trim();
+      break;
+    }
+  }
+
+  return { title, company };
+}
+
+function readCompanyNameFromCompanyPage() {
+  const selectors = [
+    '.org-top-card-summary__title',
+    '.org-top-card-module__title',
+    '.org-top-card-primary-content__title',
+    '[data-anonymize="company-name"]',
+    'h1'
+  ];
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (el && el.innerText?.trim()) {
+      return el.innerText.trim();
+    }
+  }
+  const ogTitle = document.querySelector('meta[property="og:title"]')?.content || '';
+  const name = ogTitle.split('|')[0]?.trim() || ogTitle.trim();
+  if (name) return name;
+  return '';
+}
+
+function readCompanyInfoFromPage() {
+  const infoItems = Array.from(
+    document.querySelectorAll('.org-top-card-summary-info-list__info-item')
+  )
+    .map((el) => (el.innerText || '').trim())
+    .filter(Boolean);
+
+  let sizeText = '';
+  let industryText = '';
+
+  if (infoItems.length) {
+    const sizeItem = infoItems.find((txt) => /employ/i.test(txt));
+    if (sizeItem) sizeText = sizeItem;
+
+    const industryItem = infoItems.find(
+      (txt) => !/employ/i.test(txt) && !/follower/i.test(txt) && !/\d/.test(txt)
+    );
+    if (industryItem) industryText = industryItem;
+  }
+
+  const sizeSelectors = [
+    '[data-anonymize="company-size"]',
+    '.org-about-company-module__company-size-definition-text',
+    '.org-about-company-module__company-size-definition-list',
+    '.org-page-details__definition-text',
+    'dd.org-about-company-module__definition-text'
+  ];
+  if (!sizeText) {
+    for (const selector of sizeSelectors) {
+      const el = document.querySelector(selector);
+      if (el && el.innerText?.trim() && /employ/i.test(el.innerText)) {
+        sizeText = el.innerText.trim();
+        break;
+      }
+    }
+  }
+
+  if (!industryText) {
+    const metaTitle = document.querySelector('meta[property="og:title"]')?.content || '';
+    const metaDesc = document.querySelector('meta[property="og:description"]')?.content || '';
+    const parts = `${metaTitle} ${metaDesc}`.split('|').map((p) => p.trim());
+    const candidate = parts.find((p) => p && !/linkedin/i.test(p) && !/\d/.test(p));
+    if (candidate) industryText = candidate;
+  }
+
+  return { sizeText, industryText };
 }
 
 function readHeadlineFromMeta() {
@@ -336,27 +878,6 @@ function readProfileName() {
 
   return null;
 }
-function readProfileHeadline() {
-  const selectors = [
-    '.text-body-medium.break-words',
-    '.pv-text-details__left-panel .text-body-medium',
-    '[data-generated-suggestion-target]',
-    '.text-body-medium',
-    'div[class*="text-body-medium"]',
-    '[data-anonymize="headline"]',
-    'section.artdeco-card div.inline-show-more-text',
-    'main [dir="ltr"]',
-    'main h2'
-  ];
-
-  for (const selector of selectors) {
-    const el = document.querySelector(selector);
-    if (el && el.innerText?.trim()) {
-      return el.innerText.trim();
-    }
-  }
-  return '';
-}
 
 function sendNotification(title, message) {
   try {
@@ -392,7 +913,13 @@ async function autoCaptureProfileIfMatch() {
     for (const t of titles) {
       const tNorm = normalizeTitle(t.label || '');
       if (!tNorm) continue;
-      if (headlineNorm.includes(tNorm) || nameNorm.includes(tNorm)) {
+      // Éviter les matchs sur 2 lettres ou moins (ex: PO dans "Paul", VP dans "Victor")
+      // Cohérent avec handleScanSearchPage qui applique la même protection
+      if (tNorm.length < 3) continue;
+      // Utiliser regex avec word boundaries comme handleScanSearchPage pour cohérence
+      // Cela évite les faux positifs (ex: "DATA" ne matchera pas "DATABASE")
+      const pattern = new RegExp(`\\b${tNorm.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b`);
+      if ((headlineNorm && pattern.test(headlineNorm)) || (nameNorm && pattern.test(nameNorm))) {
         matchedTitle = t;
         break;
       }
@@ -422,7 +949,10 @@ async function autoCaptureProfileIfMatch() {
       headline: profileHeadline || '',
       profileUrl: profileUrl,
       company: profileCompany || '',
-      searchTitle: matchedTitle.label || normalizeTitle(matchedTitle.label || ''),
+      employeeRange: '',
+      companySegment: '',
+      companyIndustry: '',
+      searchTitle: matchedTitle.label || '',
       direction: 'outbound_pending',
       requestDate: new Date().toISOString().split('T')[0],
       acceptanceDate: null,
@@ -435,6 +965,7 @@ async function autoCaptureProfileIfMatch() {
 
     leads.push(newLead);
     await chrome.storage.local.set({ leads });
+    pushLeadsToSupabase([newLead]);
     sendNotification(
       'Lead enregistré',
       `Ajout automatique : ${profileName || matchedTitle.label || profileUrl}`
@@ -483,17 +1014,24 @@ async function scanNetworkPageForAcceptances() {
     let updated = false;
     const today = new Date().toISOString().split('T')[0];
 
+    const updatedLeadIds = [];
     leads.forEach((l) => {
       if (l.direction === 'outbound_pending' && profileUrls.has(l.profileUrl)) {
         l.direction = 'outbound_accepted';
         l.acceptanceDate = l.acceptanceDate || today;
         l.updatedAt = Date.now();
+        updatedLeadIds.push(l.id);
         updated = true;
       }
     });
 
     if (updated) {
       await chrome.storage.local.set({ leads });
+      // Synchroniser automatiquement avec Supabase
+      const updatedLeads = leads.filter(l => updatedLeadIds.includes(l.id));
+      if (updatedLeads.length) {
+        pushLeadsToSupabase(updatedLeads);
+      }
       sendNotification('Connexions détectées', 'Certains leads ont été marqués comme acceptés.');
     }
   } catch (e) {
